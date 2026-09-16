@@ -55,8 +55,8 @@ Ascend 实现：1 AIC（Cube）+ 2 AIV（Vector）协作 / task
 ### 2.3 数据特点与片上数据流
 
 - **计算密集**：两次 `S×S×D` GEMM 主导，但 Vector 侧的 softmax 指令链同样可观；
-- **查表偏置**：score 修正项是两次表查询（`j//side`、`j%side`），寻址方式随 `side` 与向量宽度的整除关系改变——这孕育了本算子最重要的算法级优化（§6.1）；
-- **在线归约**：softmax 以行内在线方式逐 key 块归约（max/sum/O_acc 三状态递推），概率块只在片上存活、不落 GM——中间布局（ND vs NZ）直接决定 Vector 与 Cube 能否直连（§6.2）。
+- **查表偏置**：score 修正项是两次表查询（`j//side`、`j%side`），寻址方式随 `side` 与向量宽度的整除关系改变——这孕育了本算子最重要的算法级优化（§4.2 优化 2）；
+- **在线归约**：softmax 以行内在线方式逐 key 块归约（max/sum/O_acc 三状态递推），概率块只在片上存活、不落 GM——中间布局（ND vs NZ）直接决定 Vector 与 Cube 能否直连（§4.2 优化 3）。
 
 优化后形态的完整片上数据流（与原始实现的差异见 §4.1）：
 
@@ -105,11 +105,44 @@ Output GM
 
 ---
 
-## 4. 信息收集
+## 4. 逐轮优化过程
 
-### 4.1 分析瓶颈（profiling 数据）
+本章按优化顺序组织：§4.1 给出初始版本与瓶颈判定；§4.2–§4.4 三轮优化各按「问题分析 → 关键变化 → 结果」展开；§4.5 汇总总收益与最终状态。所有收益以正数（加速倍数 / 提升 %）表示。
 
-**原始实现基线**（msprof，`be78b30d` 批次）：
+### 4.1 初始版本：`T.serial` 全串行，三处数据流问题叠加
+
+**原始实现结构示意**（省略宏、掩码与同步细节，不可独立执行；①–⑤ 标出三轮优化的落点）：
+
+```python
+with T.Kernel(num_cores) as core_id:                 # 1 AIC + 2 AIV / core 组，T.Persistent 领任务
+    for task_id in T.Persistent(...):
+        Q_L1 = copy(Q[task_id])                      # task 序幕：Q 进 L1，key 循环内常驻
+        REL_H_UB, REL_W_UB = dual_copy(REL_H[task_id], REL_W[task_id])
+
+        for key_block in T.serial(key_blocks):       # ① T.serial：五段串行，C/V 交接互不掩盖
+            K_L1, V_L1 = copy(K[key_block]), copy(V[key_block])
+            QK(Q_L1, K_L1 → score_L0C)               # AIC：QK Cube
+            score_UB = dual_copy(score_L0C)          # FIXP：L0C 拆半进两路 AIV 的 UB
+
+            with T.SimdVF():                         # AIV：bias + softmax
+                for vector_id in range(2):           # 128 key = 2 向量 × 64 lane
+                    for i in range(rows_per_aiv):    # ② key-only 索引在 64 行循环内逐行重算
+                        rel_h_index = vdiv(key_idx, side)          # int16 微码除法
+                        rel_w_index = vsub(key_idx, rel_h_index * side)
+                        rel_h_vec = vcvt(vgather2(REL_H_UB[i], rel_h_index))   # ③ side=64 也走 gather（退化使用）
+                        rel_w_vec = vcvt(vgather2(REL_W_UB[i], rel_w_index))
+                        score_UB[i] = score_UB[i] * scale + rel_h_vec + rel_w_vec
+                ordinary_softmax(score_UB → prob_UB) # ④ 概率按 ND（逐行）写 prob_UB
+
+            P_L1 = dual_copy(prob_UB)                # ⑤ UB→L1 时做 ND→NZ 重排（128 条指令 + 16 KB staging）
+            PV(P_L1, V_L1 → out_L0C)                 # AIC：PV Cube
+            out_UB = dual_copy(out_L0C)
+            rescale(out_UB)                          # AIV：乘 alpha 累加
+
+        normalize_and_writeback(Output[task_id])     # 除以行和，转 bf16 写回
+```
+
+**原始实现基线**：
 
 | 指标 | S=196 | S=1600 | S=4096 |
 |---|---:|---:|---:|
@@ -122,60 +155,17 @@ Output GM
 - 每 key 块每 AIV 向量指令 4294 条：bias 2438 / softmax 1344 / ND→NZ 重排 128 / rescale 384；
 - bias 段 19 条指令中 **9 条 key-only 指令在 64 行 query 循环内逐行重算**（每 key 块每 AIV 重复执行 128 次；编译器在手写 SIMD scope 内不做外提），其中 int16 `vdiv` 为微码除法、单条代价远高于常规向量指令；
 - 概率按 ND 写出后再做 ND→NZ 重排（128 条指令 + 16 KB staging）；
-- key 循环用 `T.serial`，Cube 与 Vector 交接完全串行。
+- key 循环用 `T.serial`，每个 key 块依次经历「K/V 搬入 → QK Cube → bias+softmax → PV Cube → rescale」，Cube 与 Vector 交接完全串行、互不掩盖。
 
-**瓶颈判定**：瓶颈不在单条管线，而在三处叠加——修正分支的冗余计算（索引逐行重算）、概率路径的布局中转（ND 写出再转 NZ）、缺失的软件流水。另有一类要到后期才暴露的问题：自动调度成本模型对个别 scope 的低估（§6.3）。
+**瓶颈判定**：瓶颈不在单条管线，而在三处叠加——修正分支的冗余计算（② 索引逐行重算，③ gather 退化使其雪上加霜）、概率路径的布局中转（④⑤ ND 写出再转 NZ）、缺失的软件流水（① `T.serial` 串行交接）。另有一类要到后期才暴露的问题：自动调度成本模型对个别 scope 的低估（§4.4）。
 
-**归因速查表**（本项目实际走过的归因路径，换一个算子时按症状索引比按结论记忆更有用；"看什么"是 msprof 字段或生成代码检视点）：
+### 4.2 第一轮：结构性重构——消除数据流冗余
 
-| 症状 / 问题 | 看什么 | 本例读数 → 结论 |
-|---|---|---|
-| 时延高，不知卡在哪 | AIV/AIC 各 pipe ratio，再用关键核 trace 看单核占空 | S=4096 vec 96.6%（72 核均值）/ 97.1%（关键核）→ Vector 主导 |
-| 主导 pipe 已占满，还有空间吗 | 关键核 trace 的空隙 | 空隙 2.6%（7.4 us）→ 填空隙收益有限，转向减指令、重组数据流 |
-| 时延下降但 vec_ratio 也降 | 时延 × vec_ratio 对照 + 生成 schedule 对照 | 0.878 → 0.812：Vector 冗余减少、关键路径转向核间交接 → 加深流水（3-stage 后 0.968） |
-| 怀疑核内重叠不足 | AIV 四管之和（vec+scalar+mte2+mte3 ratio 相加） | 之和 <100% 说明串行+空转（S=196 为 79%）；明显 >100% 说明真重叠（S=4096 为 152%） |
-| 核间忙闲不均 | aiv_time 的 min/avg/max spread | 7.5→13.4 us（77%）→ 核间负载不均/并行度受限，先对照负载不均占比再谈结构重构 |
-| 搬运占比高 | mte2_ratio × 带宽占用 × 平均传输粒度 | 63.9% 高而带宽占用仅 3.6%、平均传输仅 0.41 KB → burst 结构问题，非带宽饱和 |
+#### 问题分析
 
-注意口径：同一份采集中"72 核均值 ratio"与"关键核 trace 占空"不是同一统计量，对照时保持口径一致。
+叠加 §4.1 检视出的三处数据流问题——索引逐行重算、ND 写出再转 NZ 的布局中转、gather 路径的退化使用——构成第一轮的三个改造点；同时补开 2-stage 软件流水，打破 §4.1 所述的串行交接。
 
-### 4.2 查看掩盖关系（流水图）
-
-**原始实现**：`T.serial` key 循环下每个 key 块依次经历「K/V 搬入 → QK Cube → bias+softmax → PV Cube → rescale」，Cube 与 Vector 交接串行、互不掩盖。
-
-**第一轮重构后**：数据流冗余消除使 S=4096 总时延大幅下降，但 vec_ratio 从 0.878 **降到 0.812**——结合总时延与生成调度对照，说明冗余 Vector 工作减少、关键路径转向核间交接与调度空档。
-
-**第二轮 3-stage 后**：S=4096 vec_ratio 从 0.812 **提升到 0.968**，MTE2/MTE3 被流水有效 overlap。最终版本单核组（core0：1 AIC + 2 AIV）的整 kernel 管线统计（PipeTimeline trace.json，S=4096，墙钟 289.8 us）：
-
-| 核 | 管线 | 事件数 | 忙碌 | 占墙钟 |
-|---|---|---:|---:|---:|
-| AIC | CUBE | 704 | 165.1 us | 57.0% |
-| AIC | MTE1 | 704 | 87.8 us | 30.3% |
-| AIC | MTE2 | 606 | 150.1 us | 51.8% |
-| AIC | FIXP | 386 | 170.9 us | 59.0% |
-| AIV0 | VECTOR | **36** | **278.0 us** | **95.9%** |
-| AIV0 | MTE3 | 363 | 128.9 us | 44.5% |
-| AIV1 | VECTOR | 36 | 277.7 us | 95.8% |
-
-两个信号：AIC 四条管线各占墙钟 30～59% 且互相重叠（总和远超 100%）；AIV 的 VECTOR 只有 36 个事件却忙碌 95.9%——**长连续段、几乎无空档**，说明 key 块之间的交接已被流水藏住。
-
-**3-stage 与 2-stage 的直接对照**（同机同批采集，代码相同、仅 stage 数不同；MindStudio 打开 trace.json 的单核组视图）：
-
-![3-stage 管线时间线](3_stages.png)
-
-![2-stage 管线时间线](2_stages.png)
-
-3-stage 版本 Task Duration 287.9 us，2-stage 版本 346.7 us（**3-stage 快 17.0%**）。第一张图中 CUBE 与两个 AIV 的 VECTOR 深度交错；第二张图中 Cube 批次更稀疏、AIV 侧等待区间更长——时延差来自 C/V 并行度提升，而非单条管线提速。
-
----
-
-## 5. 针对性的有效优化点
-
-优化分三轮推进：原始实现 → **结构性重构**（§5.1 + 2-stage）→ **按 shape 分派流水深度**（§5.2）→ **latency hint 校准成本模型**（§6.3）。所有收益以正数（加速倍数 / 提升 %）表示。
-
-### 5.1 针对瓶颈的优化（消除数据流冗余）
-
-#### 优化 1：key-only 索引外提（收益并入第一轮整体）
+#### 优化 1：key-only 索引外提
 
 **思路**：bias 段 9 条只依赖 key 列的索引指令（`vci/vshrs/vcmps/vsel/vdiv/vmul/vsub`）被放在 64 行 query 循环内逐行重算。按数据依赖分类：只依赖 key 的提出行循环外（每向量算一次），只依赖 query 的提出 key 循环外。
 
@@ -201,7 +191,7 @@ with T.SimdVF():
 
 **依赖判据与指令账**：`rel_h_index/rel_w_index` 只由 `key_start` 决定（key 侧），与 query 行 `i` 无关 → 提出行循环；`rel_h_vec/rel_w_vec`、`scaled_score` 逐行不同 → 留在行内。gather 路径下这一改动的指令账：9 条索引指令从每 key 块 64 行 × 2 向量 = 128 次重算（1152 条）降为每向量 1 次（18 条）；其中 `vdiv` 为微码除法、单条代价远高于常规向量指令。
 
-#### 优化 2：连续 bias 路径（`side % 64 == 0` 专属，原理见 §6.1）
+#### 优化 2：连续 bias 路径（`side % 64 == 0` 专属）
 
 ```python
 use_contiguous_rel_bias = side % vector_lanes == 0   # side=64 专属；⇒ seq_len%128==0 ⇒ 无尾块
@@ -217,9 +207,21 @@ for vector_id in range(block_N // vector_lanes):
             rel_h_vec = T.simd.vcvt(T.simd.vgather2(rel_h_ub[i, 0], rel_h_index, ...))        # gather + 掩码
 ```
 
-**两种读模式的含义**：`side % 64 == 0` 时 64 个连续 key 恰好铺满 REL_H 的一行——同一向量内行坐标 `j // side` 恒定，`BRC_B16` 广播读把同一个 bf16 元素灌满 64 lane；列坐标 `j % side` 恰为 0..63 连续，`UNPK_B16` 一次连续解包读出。相比 gather 路径，每向量省 9 条索引指令、2 条 `vgather2` 与尾块 `-inf` 掩码；`seq_len % 128 == 0` 由整除关系保证无尾块。`side=40`（S=1600）不满足整除，仍走 gather。
+**原理**：一个 64-lane 向量每次处理 64 个连续 key，REL_H 取 `j // side`（行坐标）、REL_W 取 `j % side`（列坐标），64 个 lane 的取数地址构成什么模式由整除关系决定：
 
-#### 优化 3：compact softmax 直写 NZ（key 块数 ≥13 启用，原理见 §6.2）
+| 场景 | 分组 | 行坐标 j//side | 列坐标 j%side | 取数方式 |
+|---|---|---|---|---|
+| side=64（S=4096）：64 个连续 key 恰好铺满一行 | 向量 0（key 0..63） | 恒为 0 | 0..63 连续 | REL_H 广播读（BRC_B16）+ REL_W 连续读（UNPK_B16） |
+| | 向量 1（key 64..127） | 恒为 1 | 0..63 连续 | 同上 |
+| side=40（S=1600）：64 个连续 key 跨多行 | 向量内 lane 0..39（key 0..39） | 0 | 0..39 | 逐 lane 算 (行,列) 索引（vdiv/vmul/vsub）后 gather（vgather2），尾块加 -inf 掩码 |
+| | 向量内 lane 40..63（key 40..63） | 1 | 0..23（中途回卷） | 同上 |
+
+原始实现里，即使 `side=64` 也走 gather 路径。此时 64 个 lane 的取数地址本是最规律的模式——REL_H 各 lane 同址（行坐标恒定）、REL_W 逐 lane 连续（0..63）——广播读/连续读即可覆盖；而 gather 是逐 lane 独立取址的慢路径，在这里属于退化使用。三重冗余同时成立：索引指令算出的是"恒定 + 0..63"的平凡序列；gather 承担了广播/连续读就能完成的工作；rel_w 对相邻向量是同一份结果，却各自重查。`side % 64 == 0` 的识别让编译期分派掉这一切——条件成立时，生成的指令流里只剩一条广播读（`BRC_B16`）与一条连续读（`UNPK_B16`），索引指令、gather、尾块掩码根本不存在，每向量省 9 条索引指令、2 条 `vgather2` 与尾块 `-inf` 掩码。背后的通用原则：**不规则索引尽量前置到可向量化的阶段批量处理**；整除关系成立时更进一步——地址模式本身就是索引，连索引计算都可以消掉。
+
+**适用条件**：查表偏置的行/列坐标周期与 SIMD 向量宽度成整除关系，且偏置表按行存储。
+**不适用**：`side` 非向量宽度倍数（本例 side=40 只能 gather）；ALiBi 等连续函数偏置无需查表，直接算即可。
+
+#### 优化 3：compact softmax 直写 NZ（key 块数 ≥13 启用）
 
 ```python
 # ① even/odd 各转 bf16：part=0/1 把 fp32 概率转出的 bf16 分别放进 32-bit lane 的低/高 16 位
@@ -235,7 +237,20 @@ T.simd.vsstb(T.reinterpret(merged_bits, 'bfloat16x128'),
 T.simd.mem_bar('VST_VLD')
 ```
 
-**机制**：NZ 的块内交错结构恰好等于偶/奇元素交错——`vcvt(part=0/1)` 让偶位元素的 bf16 落在 32-bit lane 低半、奇位落在高半（另一半为 0），一条 `vor` 按位拼合，`vsstb` 按 NZ stride 散写落盘。`p_nz_ub` 按该布局摆放并多分一行（对齐拷贝粒度），`make_ascend_compact_nz_layout` 注解使 UB→L1 的 `dual_copy` 退化为纯连续搬运——原路径 ND→NZ 重排的 128 条指令与 16 KB staging 全部消失。**代价**：softmax 由单遍在线变为两遍扫描（第一遍求本块 row-max 并与历史 max 合并，`mem_bar` 后第二遍 exp/写盘/求和），块数少时摊不回来——`key_block_count ≥ 13` 的分派阈值由此而来。
+**原理**：第二 GEMM（PV）要求 P 以 NZ（分块转置）布局进入 L1。原路径先按 ND（逐行）写 UB，再由拷贝做 ND→NZ 重排；compact 路径的关键洞察是 **生产者直写消费者布局**——让 Vector 直接生产 NZ：
+
+| 步骤 | 原路径（ND 中转） | compact 路径（直写 NZ） |
+|---|---|---|
+| 概率写出 | vcvt 转 bf16，vsts 按 ND 写 prob_ub | vcvt(even, part=0) + vcvt(odd, part=1)，vor 按位合并成 bf16 对 |
+| 布局转换 | dual_copy 内 ND→NZ 重排（128 条指令 + 16 KB staging） | vsstb 按 NZ stride 直接落盘（寄存器内完成 ND→NZ） |
+| UB→L1 | 重排后拷贝进 p_l1 | make_ascend_compact_nz_layout 使拷贝纯连续 |
+
+**机制**：NZ 的块内交错结构恰好等于偶/奇元素交错——`vcvt(part=0/1)` 让偶位元素的 bf16 落在 32-bit lane 低半、奇位落在高半（另一半为 0），一条 `vor` 按位拼合，`vsstb` 按 NZ stride 散写落盘。`p_nz_ub` 按该布局摆放并多分一行（对齐拷贝粒度），`make_ascend_compact_nz_layout` 注解使 UB→L1 的 `dual_copy` 退化为纯连续搬运——原路径 ND→NZ 重排的 128 条指令与 16 KB staging 全部消失，在大 shape（Vector 饱和）时收益最大。**代价**：softmax 由单遍在线变为两遍扫描（第一遍求本块 row-max 并与历史 max 合并，`mem_bar` 后第二遍 exp/写盘/求和），块数少时摊不回来——`key_block_count ≥ 13` 的分派阈值由此而来。
+
+**适用条件**：消费者布局可以被寄存器级操作（cast part + 位合并 + scatter store）直接表达；概率块仅在片上存活（不落 GM）。
+**不适用**：布局转换需要跨行数据重排（寄存器内无法完成）；短序列保留 ordinary 单遍路径。
+
+#### 结果
 
 **第一轮整体效果**（三项叠加 + 软件流水，msprof）：
 
@@ -245,9 +260,18 @@ T.simd.mem_bar('VST_VLD')
 | 加速倍数 | **×2.35** | **×4.54** | **×7.25** |
 | AIV vec（旧 → 新） | 0.769 → 0.465 | 0.870 → 0.765 | 0.878 → 0.812 |
 
-### 5.2 针对流水的优化
+### 4.3 第二轮：按 shape 分派流水深度（2/3-stage）
 
-#### 优化 4：key 循环 `T.serial` → `T.Pipelined`，按 key 块数分派 2/3-stage
+#### 问题分析
+
+第一轮消除冗余后，S=4096 的关键路径转移到了核间交接与调度空档（vec_ratio 从 0.878 降到 0.812，见 §4.2 结果）。本轮优化前（第一轮 2-stage 版本）的 msprof 数据：
+
+| 指标 | S=196 | S=1600 | S=4096 |
+|---|---:|---:|---:|
+| TaskDuration | 14.1 us | 103.3 us | 346.7 us |
+| AIV vec_ratio | 0.465 | 0.765 | 0.812 |
+
+#### 关键变化
 
 ```python
 PIPELINE_3STAGE_MIN_KEY_BLOCKS = 13
@@ -261,24 +285,75 @@ for key_block in T.Pipelined(key_blocks, num_stages=pipeline_stages,
     ...   # 循环体不变
 ```
 
+#### 结果
+
 **效果**（msprof）：S=1600 2→3-stage 103.3 → 89.5 us（**提升 13.4%**，加速 ×1.15）；S=4096 346.7 → 287.9 us（**提升 17.0%**，加速 ×1.20）；S=4096 vec_ratio 0.812 → 0.968。S=196 在第一轮重构后仍是 `num_stages=1` 全串行（仅 2 个 key 块），补开 2-stage：14.1 → 13.3 us（提升 5.7%）——短循环也能从双缓冲受益。
 
-### 5.3 优化效果对比，总收益
+**优化前后流水对照**（同机同批采集，代码相同、仅 stage 数不同；MindStudio 打开 trace.json 的单核组视图）：
+
+![优化前：2-stage 管线时间线](2_stages.png)
+
+![优化后：3-stage 管线时间线](3_stages.png)
+
+2-stage 版本 Task Duration 346.7 us，3-stage 版本 287.9 us（**3-stage 快 17.0%**）。3-stage 图中 CUBE 与两个 AIV 的 VECTOR 深度交错；2-stage 图中 Cube 批次更稀疏、AIV 侧等待区间更长——时延差来自 C/V 并行度提升，而非单条管线提速。
+
+3-stage 后 MTE2/MTE3 被流水有效 overlap。最终版本单核组（core0：1 AIC + 2 AIV）的整 kernel 管线统计（PipeTimeline trace.json，S=4096，墙钟 289.8 us）：
+
+| 核 | 管线 | 事件数 | 忙碌 | 占墙钟 |
+|---|---|---:|---:|---:|
+| AIC | CUBE | 704 | 165.1 us | 57.0% |
+| AIC | MTE1 | 704 | 87.8 us | 30.3% |
+| AIC | MTE2 | 606 | 150.1 us | 51.8% |
+| AIC | FIXP | 386 | 170.9 us | 59.0% |
+| AIV0 | VECTOR | **36** | **278.0 us** | **95.9%** |
+| AIV0 | MTE3 | 363 | 128.9 us | 44.5% |
+| AIV1 | VECTOR | 36 | 277.7 us | 95.8% |
+
+两个信号：AIC 四条管线各占墙钟 30～59% 且互相重叠（总和远超 100%）；AIV 的 VECTOR 只有 36 个事件却忙碌 95.9%——**长连续段、几乎无空档**，说明 key 块之间的交接已被流水藏住。
+
+### 4.4 第三轮：latency hint 校准成本模型
+
+#### 问题分析
+
+编译器的 op-count 估计对某些 scope（本例 ordinary softmax，~1344 条 SIMD ops）系统性偏低，导致自动调度器给出的重叠预算不足。
+
+#### 关键变化
+
+`T.SimdVF(latency=N)` 是向成本模型补充信息的接口：hint 把该 scope 的代价估计拉到合理量级，调度器据此重排 stage 结构——**指令体一条不变，变的只有生成调度**。
+
+```python
+@T.macro
+def ordinary_softmax(score_ub, prob_ub, max_ub, sum_ub, alpha_ub):
+    # Auto-scheduler latency hint (tl.vf_latency)：~1344 条 SIMD ops / key 块，
+    # 按参考 flash-attention 的保守 ~1.41 ops/cycle 折算（其 softmax ~1041 ops → 735 cycles），
+    # 即 1344 / 1.41 ≈ 948。
+    with T.SimdVF(latency=948):
+        ...   # 原有 softmax 指令体逐条不变
+```
+
+#### 结果
+
+**效果**（4 次独立复测）：提示前中位数 13.3 us，提示后中位数 **12.1 us**（**提升 9.0%**）。948 始终是**候选延迟估计**，不是实测等待时延。
+
+**适用条件**：指令体不变、调度类参数却带来超出噪声的波动；有生成代码与 Profile 支持的模型偏差假设；hint 值来源（估算/实测）可记录。
+**不适用**：瓶颈在数据流冗余或搬运时（先做 §4.2）；把提示扩散到非瓶颈 scope。
+
+### 4.5 总收益与最终状态
 
 **累计优化（A/B 逐步叠加）**：
 
 | 版本 | S=196 | S=1600 | S=4096 | 累计加速（196/1600/4096） |
 |---|---:|---:|---:|---|
 | 原始实现 | 33.2 us | 469.2 us | 2514.7 us | — |
-| + 第一轮结构性重构（§5.1 + 2-stage） | 14.1 us | 103.3 us | 346.7 us | ×2.35 / ×4.54 / ×7.25 |
-| + 第二轮流水深度分派（§5.2） | 13.3 us | 89.5 us | 287.9 us | ×2.49 / ×5.24 / ×8.74 |
-| + 第三轮 latency hint（§6.3） | **12.1 us** | 89.5 us | **287.5 us** | **×2.74 / ×5.24 / ×8.75** |
+| + 第一轮结构性重构（§4.2） | 14.1 us | 103.3 us | 346.7 us | ×2.35 / ×4.54 / ×7.25 |
+| + 第二轮流水深度分派（§4.3） | 13.3 us | 89.5 us | 287.9 us | ×2.49 / ×5.24 / ×8.74 |
+| + 第三轮 latency hint（§4.4） | **12.1 us** | 89.5 us | **287.5 us** | **×2.74 / ×5.24 / ×8.75** |
 
 ![三组 case 时延演进（归一化到原始实现）](attention_latency_evolution.png)
 
 收益结构：第一轮消除数据流冗余，贡献累计加速的大头；第二、三轮分别针对调度空档与成本模型，在第一轮基础上再提升 14.2%/13.4%/17.1%——三轮解决的是性质不同的瓶颈。
 
-**优化后的效果**（最终版本，72 AIV / 36 AIC 均值）：
+**最终版本指标**（72 AIV / 36 AIC 均值）：
 
 | 指标 | S=196 | S=1600 | S=4096 |
 |------|-------|--------|--------|
@@ -294,65 +369,24 @@ for key_block in T.Pipelined(key_blocks, num_stages=pipeline_stages,
 
 ---
 
-## 6. 非常规优化：算法级路径分派
+## 5. 归因速查表与关键经验
 
-常规优化做的是工程手段（外提、流水、缓冲）；当优化空间藏在**数据语义、布局与调度模型的特殊性质**上时，需要回到算子本身找——这是本节三个优化"非常规"的原因，每条均附适用条件。
+### 5.1 归因速查表
 
-### 6.1 整除性路径分派：为什么 `side % 64 == 0` 可以免 gather
+（本项目实际走过的归因路径，换一个算子时按症状索引比按结论记忆更有用；"看什么"是 msprof 字段或生成代码检视点）
 
-一个 64-lane 向量每次处理 64 个连续 key。REL_H 取 `j // side`（行坐标），REL_W 取 `j % side`（列坐标），两种取数模式由整除关系决定：
-
-| 场景 | 分组 | 行坐标 j//side | 列坐标 j%side | 取数方式 |
-|---|---|---|---|---|
-| side=64（S=4096）：64 个连续 key 恰好铺满一行 | 向量 0（key 0..63） | 恒为 0 | 0..63 连续 | REL_H 广播读（BRC_B16）+ REL_W 连续读（UNPK_B16） |
-| | 向量 1（key 64..127） | 恒为 1 | 0..63 连续 | 同上 |
-| side=40（S=1600）：64 个连续 key 跨多行 | 向量内 lane 0..39（key 0..39） | 0 | 0..39 | 逐 lane 算 (行,列) 索引（vdiv/vmul/vsub）后 gather（vgather2），尾块加 -inf 掩码 |
-| | 向量内 lane 40..63（key 40..63） | 1 | 0..23（中途回卷） | 同上 |
-
-原始实现里，即使 `side=64` 也走 gather 路径。此时 64 个 lane 的取数地址本是最规律的模式——REL_H 各 lane 同址（行坐标恒定）、REL_W 逐 lane 连续（0..63）——广播读/连续读即可覆盖；而 gather 是逐 lane 独立取址的慢路径，在这里属于退化使用。三重冗余同时成立：索引指令算出的是"恒定 + 0..63"的平凡序列；gather 承担了广播/连续读就能完成的工作；rel_w 对相邻向量是同一份结果，却各自重查。`side % 64 == 0` 的识别让编译期分派掉这一切——条件成立时，生成的指令流里只剩一条广播读（`BRC_B16`）与一条连续读（`UNPK_B16`），索引指令、gather、尾块掩码根本不存在。背后的通用原则：**不规则索引尽量前置到可向量化的阶段批量处理**；整除关系成立时更进一步——地址模式本身就是索引，连索引计算都可以消掉。
-
-**适用条件**：查表偏置的行/列坐标周期与 SIMD 向量宽度成整除关系，且偏置表按行存储。
-**不适用**：`side` 非向量宽度倍数（本例 side=40 只能 gather）；ALiBi 等连续函数偏置无需查表，直接算即可。
-
-### 6.2 布局直连：为什么 compact softmax 可以直写 NZ
-
-第二 GEMM（PV）要求 P 以 NZ（分块转置）布局进入 L1。原路径先按 ND（逐行）写 UB，再由拷贝做 ND→NZ 重排；compact 路径让 Vector **直接生产 NZ**：
-
-| 步骤 | 原路径（ND 中转） | compact 路径（直写 NZ） |
+| 症状 / 问题 | 看什么 | 本例读数 → 结论 |
 |---|---|---|
-| 概率写出 | vcvt 转 bf16，vsts 按 ND 写 prob_ub | vcvt(even, part=0) + vcvt(odd, part=1)，vor 按位合并成 bf16 对 |
-| 布局转换 | dual_copy 内 ND→NZ 重排（128 条指令 + 16 KB staging） | vsstb 按 NZ stride 直接落盘（寄存器内完成 ND→NZ） |
-| UB→L1 | 重排后拷贝进 p_l1 | make_ascend_compact_nz_layout 使拷贝纯连续 |
+| 时延高，不知卡在哪 | AIV/AIC 各 pipe ratio，再用关键核 trace 看单核占空 | S=4096 vec 96.6%（72 核均值）/ 97.1%（关键核）→ Vector 主导 |
+| 主导 pipe 已占满，还有空间吗 | 关键核 trace 的空隙 | 空隙 2.6%（7.4 us）→ 填空隙收益有限，转向减指令、重组数据流 |
+| 时延下降但 vec_ratio 也降 | 时延 × vec_ratio 对照 + 生成 schedule 对照 | 0.878 → 0.812：Vector 冗余减少、关键路径转向核间交接 → 加深流水（3-stage 后 0.968） |
+| 怀疑核内重叠不足 | AIV 四管之和（vec+scalar+mte2+mte3 ratio 相加） | 之和 <100% 说明串行+空转（S=196 为 79%）；明显 >100% 说明真重叠（S=4096 为 152%） |
+| 核间忙闲不均 | aiv_time 的 min/avg/max spread | 7.5→13.4 us（77%）→ 核间负载不均/并行度受限，先对照负载不均占比再谈结构重构 |
+| 搬运占比高 | mte2_ratio × 带宽占用 × 平均传输粒度 | 63.9% 高而带宽占用仅 3.6%、平均传输仅 0.41 KB → burst 结构问题，非带宽饱和 |
 
-关键洞察是 **生产者直写消费者布局**：NZ 的交错结构恰好可以用"even/odd 两个 vcvt part + 一条 vor"在寄存器内完成，`vsstb` 的 scatter-store 直接按 NZ stride 落盘，中间布局与重排指令全部消失。
+注意口径：同一份采集中"72 核均值 ratio"与"关键核 trace 占空"不是同一统计量，对照时保持口径一致。
 
-**适用条件**：消费者布局可以被寄存器级操作（cast part + 位合并 + scatter store）直接表达；概率块仅在片上存活（不落 GM）。
-**不适用**：布局转换需要跨行数据重排（寄存器内无法完成）；key 块数过少时两遍扫描的额外行缓冲摊不回来（本算子以 `key_block_count ≥ 13` 为分派阈值，短序列保留 ordinary 单遍路径）。
-**收益边界**：省 128 条重排指令 + 16 KB staging/块；在大 shape（Vector 饱和）时收益最大。
-
-### 6.3 调度模型校准：为什么 latency hint 是"改模型"而不是"改硬件"
-
-`T.SimdVF(latency=N)` 是向自动调度成本模型补充信息的接口：编译器的 op-count 估计对某些 scope（本例 ordinary softmax，~1344 条 SIMD ops）系统性偏低，导致调度器给出的重叠预算不足。hint 把该 scope 的代价估计拉到合理量级，调度器据此重排 stage 结构——**指令体一条不变，变的只有生成调度**。
-
-```python
-@T.macro
-def ordinary_softmax(score_ub, prob_ub, max_ub, sum_ub, alpha_ub):
-    # Auto-scheduler latency hint (tl.vf_latency)：~1344 条 SIMD ops / key 块，
-    # 按参考 flash-attention 的保守 ~1.41 ops/cycle 折算（其 softmax ~1041 ops → 735 cycles），
-    # 即 1344 / 1.41 ≈ 948。
-    with T.SimdVF(latency=948):
-        ...   # 原有 softmax 指令体逐条不变
-```
-
-**效果**（`13096266` 批次，4 次独立复测）：提示前中位数 13.3 us，提示后中位数 **12.1 us**（**提升 9.0%**）。948 始终是**候选延迟估计**，不是实测等待时延。
-
-**适用条件**：指令体不变、调度类参数却带来超出噪声的波动；有生成代码与 Profile 支持的模型偏差假设；hint 值来源（估算/实测）可记录。
-**不适用**：瓶颈在数据流冗余或搬运时（先做 §5.1）；把提示扩散到非瓶颈 scope。
-**收益边界**：本例提升 9.0%（S=196）。
-
----
-
-## 7. 关键经验
+### 5.2 关键经验
 
 1. **先看 C/V 衔接，再谈单管线**：混合核的瓶颈往往是"两条管线的交接"而非某条管线本身——原始实现 Vector 被高价索引指令占据，第一轮消除冗余后 vec_ratio 反而下降（0.878→0.812），说明关键路径转移到了交接空档；3-stage 把空档吸干（0.968）才兑现全部收益。时延 × vec_ratio 的交叉解读是本类算子最重要的诊断动作；
 2. **数据依赖分类是修正分支优化的第一步**：只依赖 key 的计算提出行循环外、只依赖 query 的提出 key 循环外；手写 SIMD scope 内编译器不做外提，必须检查生成代码确认；
