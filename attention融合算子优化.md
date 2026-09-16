@@ -34,10 +34,12 @@ O = P @ V
 ### 2.1 位置
 
 ```text
-文档图像 → patch embedding → ViT 视觉编码器（N 个 block）→ 语言模型
-
-每个 ViT block 的注意力（四段融合为一个混合核）：
-  QKᵀ → +REL_H/+REL_W 查表 → online softmax → PV
+文档图像
+  → patch embedding
+  → ViT 视觉编码器（N 个 block，每个 block 执行一次本算子）
+       block 内的注意力 = 本算子（四段融合为一个混合核）：
+         QKᵀ → +REL_H/+REL_W 查表 → online softmax → PV
+  → 语言模型
 
 Ascend 实现：1 AIC（Cube）+ 2 AIV（Vector）协作 / task
 ```
@@ -95,11 +97,11 @@ Output GM
 
 ## 3. 优化总览
 
-| 优化类别 | 本算子的手段 | 适用前提 | 参考来源 |
+| 轮次 | 手段 | 针对的问题 | 参考来源 |
 |---|---|---|---|
-| 常规·瓶颈侧 | key-only 索引外提、连续 bias 路径、compact softmax 直写 NZ | 生成代码检视发现冗余/中转 | profiling + kernel source |
-| 常规·流水侧 | `T.serial`→`T.Pipelined`、按 key 块数分派 2/3-stage | C/V 交接空档 | PipeTimeline |
-| 非常规·算法侧 | 整除性路径分派、NZ 直写、latency hint 校准成本模型 | 数据语义/布局/调度模型的特殊性质 | 代码分析 + trace |
+| 第一轮·数据流 | key-only 索引外提；连续 bias 路径（`side % 64 == 0` 编译期分派）；compact softmax 直写 NZ | 指令冗余（行内重算、gather 退化）与布局中转（ND→NZ） | 生成代码检视 + profiling |
+| 第二轮·流水 | `T.serial`→`T.Pipelined`，按 key 块数分派 2/3-stage | C/V 交接空档 | PipeTimeline |
+| 第三轮·成本模型 | latency hint 校准 ordinary softmax 的代价估计 | 调度器对 scope 代价低估 | 生成代码 + trace |
 
 **经验法则**：Attention 混合核先看 C/V 衔接（数据流冗余 → 流水 → 成本模型，按此顺序），再考虑指令级手段；指令削减只有在 Vector 成为关键路径后才可能变现。
 
@@ -264,12 +266,22 @@ T.simd.mem_bar('VST_VLD')
 
 #### 问题分析
 
-第一轮消除冗余后，S=4096 的关键路径转移到了核间交接与调度空档（vec_ratio 从 0.878 降到 0.812，见 §4.2 结果）。本轮优化前（第一轮 2-stage 版本）的 msprof 数据：
+第一轮消除冗余后，S=4096 的关键路径转移到了核间交接与调度空档（vec_ratio 从 0.878 降到 0.812，见 §4.2 结果）。本轮优化前（第一轮 2-stage 版本）S=4096 的分管线占比：
 
-| 指标 | S=196 | S=1600 | S=4096 |
-|---|---:|---:|---:|
-| TaskDuration | 14.1 us | 103.3 us | 346.7 us |
-| AIV vec_ratio | 0.465 | 0.765 | 0.812 |
+| 管线 | 占比 |
+|---|---:|
+| AIV vec | 70.2% |
+| AIV scalar | 7.4% |
+| AIV mte2 | 5.3% |
+| AIV mte3 | 16.9% |
+| AIC cube | 20.0% |
+| AIC mte1 | 15.0% |
+| AIC mte2 | 49.6% |
+| AIC fixpipe | 27.3% |
+
+AIV 侧除 vec 外各管线都很空（scalar/mte2 仅个位数占比），空档不在 Vector 自身的计算，而在与 Cube、搬运的交接；AIC 侧 mte2 近半、fixpipe 与 cube 各占两三成，同样互未吃满。两侧的交接空档正是加深流水要吸收的部分。
+
+三个 shape 的 key 块数分别为 2 / 13 / 32——块数多的吃得下更深的流水，块数少的第一轮后甚至仍是 `num_stages=1`。流水深度按 key 块数分派（阈值 13），正是本轮的改造点。
 
 #### 关键变化
 
