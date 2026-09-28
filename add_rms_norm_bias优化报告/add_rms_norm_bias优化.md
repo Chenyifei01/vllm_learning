@@ -25,6 +25,18 @@ y     = bf16( fp32(bf16(x_norm)) × fp32(γ) + fp32(β) )   # 双舍入契约
 返回 (y, rstd, x) 三份输出
 ```
 
+### 结论摘要
+
+| 项目 | 结论 |
+|---|---|
+| 生产主路径 | bf16、hidden=7168、rows≥41 → tiling key 30（NORMAL 变体）；decode（rows≤40）→ SINGLE_N |
+| 基线瓶颈 | 发射线程停等（scalar_wait 占墙钟 85%）+ 行间零流水 + 15 遍全宽 pass 中 3 遍冗余 |
+| 核心方案 | 消 V_S/S_V 往返（rstd 全程 V 域）、双缓冲行间流水、γ/β cast 上提每核 |
+| 最终收益 | bf16 @2048 -24.8%（119.4→89.8µs）、@4096 -26.8%；fp16 @2048 -4.1% |
+| 最终状态 | 有效带宽约 1.31TB/s（名义峰值 ~1.6TB/s 的 82%），接近带宽/向量流水转折区 |
+| 正确性 | 原 126 用例 + 新增严格 150 用例全绿（y=3ulp / rstd=1e-3 / x 位级） |
+| 已回退方案 | Reduce 多链交错重构：收益噪声级且存在 dst==src1 交错 fault 风险（见 §4.6） |
+
 ---
 
 ## 2. 算子在大模型中的位置与数据
@@ -93,6 +105,15 @@ SPLIT_D 的触发条件是 `numCol > ubFactor`（有 β 时 bf16 上限 11264 �
 
 **经验法则**：先实证 tiling 命中的变体（优化错变体 = 零收益）→ 消标量往返与冗余 pass（等价变换，风险最低）→ 行间流水（收益最大，风险最高，用已验证模板）→ 每步以「未动路径」作噪声金丝雀校准收益真伪 → HBM 带宽墙校准终局预期。
 
+**代码定位**（仓库 vllm-ascend，分支 add-rms-norm-bias-perf）：
+
+| 轮次 | 文件 / 函数 | commit |
+|---|---|---|
+| 第一轮 | `csrc/moe/add_rms_norm_bias/op_kernel/add_rms_norm_bias.h`：`MulByRstd`、三 dtype `Compute`；`op_host/add_rms_norm_bias_tiling.cpp`：`DetermineModeParameters` | 02392101f |
+| 第二轮 | 同 kernel 文件：`ProcessPipelined` / `ProcessPipelinedRow` | 7484fc0f1 |
+| 第三轮 | 同文件序言重排；`add_rms_norm_bias_multi_n.h` `ComputeRstd`；`add_rms_norm_bias_single_n.h` `ProcessFp16/Fp32/Bf16` | 8e50acd56 |
+| 检视修复 | tiling 成本模型与校验；三 kernel 文件；`tests/e2e/.../test_add_rms_norm_bias_strict.py`（新增） | d7132b0d5 |
+
 ---
 
 ## 4. 逐轮优化过程
@@ -107,18 +128,18 @@ SPLIT_D 的触发条件是 `numCol > ubFactor`（有 β 时 bf16 上限 11264 �
 | mte2 / mte3 busy | 27.0 / 18.7µs | 22% / 15% | 未与 V 充分重叠 |
 | **scalar_wait** | **106.0µs** | **85%** | 发射线程几乎全程停等 |
 
-两个信号拼出双瓶颈结构：V 是最大占用者但空转 27%；scalar_wait 85% 说明发射线程被每行的标量往返与单缓冲队列的串行点钉死——它停着，装载/落盘的重叠就无从谈起。
+两个信号拼出双瓶颈结构：V 是最大占用者但空转 27%；scalar_wait 85% 说明发射线程被每行的标量往返与单缓冲队列的串行点钉死——它停着，装载/落盘的重叠就无从谈起。注意口径：**各 pipe 的 busy/wait 统计在时间上可能重叠，不是互斥占比，不能相加得到 100%**。
 
-**代码走读量化清单**（bf16 每行 15 遍全宽 pass）：
+**代码走读量化清单**（bf16 每行，按类别计数）：
 
-| # | pass | 判定 |
-|---|---|---|
-| 1-4 | cast x1/x2 → add → rint = x 输出 | 语义必需（c220 无 bf16 元级加法） |
-| 5-7 | mul 平方 → muls ×1/N → reduce 树 | muls 可折叠（#6） |
-| 8-9 | 标量链 + **V_S→GetValue→S_V→SetValue** | 往返可消除（#9） |
-| 10 | muls ×rstd（标量操作数） | 可改 stride-0 广播（位级一致） |
-| 11-14 | rint y-mid → 重新 widen → cast γ → cast β | **γ/β cast 每行重做，可上提** |
-| 15-17 | mul γ → add β → rint y 输出 | 语义必需 |
+| 类别 | 基线 | 第一轮后 | 变化 | 明细 |
+|---|---:|---:|---|---|
+| 全宽向量 pass（≥64 lane 宽度） | 15 | 12 | **-3** | cast x1、cast x2、add、rint=x 输出、mul 平方、**muls ×1/N（折叠）**、reduce 树、muls ×rstd、rint y-mid、重新 widen、**cast γ（上提）**、mul γ、**cast β（上提）**、add β、rint y 输出 |
+| 单元素向量/标量操作 | ~6 | ~6 | 不变 | Adds(eps)/Sqrt/Duplicate(ONE)/Div + rstd 累积 |
+| V/S 跨流水同步 | 2 次/行 | 0 | **-2 次/行** | V_S→GetValue→S_V→SetValue 整链消除（rstd 留在 V 域） |
+| GM 读写量/行 | 5 份 | 5 份 | 不变 | 读 x1/x2，写 x/y（+rstd 每 64 行 1 次） |
+
+（表中编号即上表行序；"15 遍全宽"只计全宽向量遍历，不含单元素操作与同步步骤。）
 
 ### 4.2 第一轮：消标量往返与冗余 pass
 
@@ -209,27 +230,58 @@ NPUGraph：@2048 109.3→**86.7µs**（**-20.7%**），@4096 -21.9%，@512 -7.8%
 
 验证：原 126 + 严格 150 全绿。代价：@2048 89.8µs（85.9 → +4.5%）。**"126/126 通过"在宽松断言下不是精度证据**——严格断言先行，性能优化才有裁判。
 
+**优化后 NORMAL 路径 UB 预算表**（bf16，hidden=7168，可用 UB = 192KB − 1KB 系统保留 = 195,584B）：
+
+| 缓冲 | 每列成本 | hidden=7168 占用 |
+|---|---:|---:|
+| x1[2] / x2[2] 双缓冲（bf16） | 8 B | 57.3 KB |
+| xFp32Buf + sqxBuf（fp32 工作区） | 8 B | 57.3 KB |
+| γ/β fp32 常驻 | 8 B | 57.3 KB |
+| rstdAcc（8-lane/行 × rowFactor=64） | — | 2 KB |
+| iota + compBuf + reduceFp32 | — | 768 B |
+| one / zeroOff / rstdBcast | — | 96 B |
+| **合计** | **24 B/列 + 3.2KB 固定** | **≈175 KB**（余量 ~16KB） |
+
+hidden=8192 推导：24 × 8192 + 3200 = 199,808B > 195,584B → 超限；回退阈值公式
+`numColAlign ≤ (195584 − 3200) / 24 ≈ 8009 列`（对齐后 7168 走 NORMAL、8192 回退 SPLIT_D）。
+host 侧以同式实装为成本模型（`DetermineModeParameters`），kernel 不再自行假设预算。
+
+**严格正确性测试矩阵**（test_add_rms_norm_bias_strict.py，golden 为 numpy/torch fp32 参考实现，输入 uniform[1,10]、seed=45）：
+
+| 验证维度 | 用例 | 结果 |
+|---|---|---|
+| 数值契约（原 126 矩阵，宽松断言仅作回归） | 7 rows × 6 cols × 3 dtype | 126/126 |
+| y 容差 = 3 输出 ulp（双舍入链放大 rstd 求和顺序差异；实测最大 2 fp16 ulp / 2 bf16 ulp） | 覆盖全部严格用例 | 通过 |
+| rstd 行混叠（rtol/atol=1e-3；行间独立随机数据使每行 rstd 差异为百分比级） | 全部多行/核 shape | 通过 |
+| x 位级一致（双方同为一次 fp32 加 + 一次舍入） | 同上 | 通过 |
+| 压缩尾块长度（rows=313/2064/2600 → n=8/52/64+1） | bf16/fp16/fp32 | 通过 |
+| UB 边界（col=8192 → SPLIT_D 回退、colTileNum≥2） | 3 dtype | 通过 |
+| 无 β 路径（nullptrBeta kernel 分支与成本模型） | 4 组 | 通过 |
+| epsilon NaN / +Inf 拒绝 | 2 用例 | 通过 |
+| beta 短 shape 拒绝（越界读防护） | 1 用例 | 通过 |
+| 未覆盖（留档）：Inf/全零/极值输入、输入输出别名/原地约束 | — | — |
+
 ![检视修复的正确性代价与累计收益](r4_correctness_cost.svg)
 
 ### 4.6 负结果：Reduce 依赖链重构被设备证伪
 
-**假设**：legacy 归约的单指令多 repeat `Add(..., dstRepStride=0)` 在同一累加块上形成 112 深 RAW 链，顺序 V 管线应完整暴露该延迟（估 0.3-0.6µs/行）；8 链交错发射可消除。
+按固定模板记录（假设 → 实验变量 → 控制变量 → 设备观测 → 结果 → 结论 → 回退）：
 
-**实验**（8×64-float 累加器、交错发射、显式两两折叠；仅切换流水化 bf16 路径）：
+1. **假设**：legacy 归约的单指令多 repeat `Add(..., dstRepStride=0)` 在同一累加块上形成 112 深 RAW 链，顺序 V 管线应完整暴露该延迟（估 0.3-0.6µs/行）；8 链交错发射可消除。
+2. **实验变量**：新增 `ReduceSumFP32Parallel`（8×64-float 累加器、交错发射、显式两两折叠 + WRS），仅切换流水化 bf16 路径的 reduce 调用，其余不动；过程中按二分法变换发射顺序与操作数位次（V1/V2a/V2b，见下表）。
+3. **控制变量**：数据、shape、设备、测量口径全部不变；每轮 clean build + md5 自检。
+4. **设备观测**：
 
-| 实验 | 结果 |
-|---|---|
-| 交错发射，累加器在 src1（dst==src1） | **vector core exception**（col=7168 无尾也崩） |
-| 链主体顺序发射（其余同上） | 通过 → 故障定位于交错本身 |
-| 交错发射，累加器在 **src0**（dst==src0） | 通过 → 可用形式 |
-| 最终版（150 严格 + 126 全绿） | @2048 89.09 vs 89.81µs（**-0.8%，噪声级**）；vec busy 77.4µs = 加回 avgFactor pass 后的预期值，分毫未降 |
+| 实验 | 发射顺序 / 操作数位次 | 观测 |
+|---|---|---|
+| V1 | 交错发射，累加器在 src1（dst==src1） | **vector core exception**（col=7168 无尾也崩 → 与尾路径无关） |
+| V2a | 链主体顺序发射（其余同 V1） | 通过 → 故障定位于交错本身 |
+| V2b | 交错发射，累加器在 **src0**（dst==src0） | 通过 → 可用形式 |
+| V2b 最终版 | 150 严格 + 126 全绿 | @2048 89.09 vs 89.81µs（**-0.8%，噪声级**）；vec busy 77.4µs = 加回 avgFactor pass 后的预期值，分毫未降 |
 
-**两条 c220 硬件实证事实**（比收益本身更有价值）：
-
-1. **单指令多 repeat 的累加（dstRepStride=0）硬件内部按吞吐执行，不暴露 repeat 间依赖延迟**——"拆依赖链"这类经典 CPU 直觉在该指令形态上零收益；静态分析发现的 0.44µs/行"未解释缺口"应归属 cast 半吞吐等因素。
-2. **交错发射的单 repeat `Add`，dst 轮转且 dst==src1 时触发 vector core exception；累加器放 src0 位（dst==src0）则安全**。顺序发射时 dst==src1 无恙。
-
-已回退（112 条标量发射/行 vs legacy 1 条，issue 侧反而更重）。负结果与其机理一并留档，避免未来重复推导。
+5. **性能与正确性结果**：正确性零回退；性能收益 -0.8% 为噪声级——延迟链假设**证伪**：单指令多 repeat 的累加（dstRepStride=0）硬件内部按吞吐执行，不暴露 repeat 间依赖延迟（"拆依赖链"这类经典 CPU 直觉在该指令形态上零收益；静态分析发现的 0.44µs/行"未解释缺口"应归属 cast 半吞吐等因素）。
+6. **结论**：两条 c220 硬件实证事实沉淀——①多 repeat 累加无依赖延迟暴露（同上）；②**交错发射的单 repeat `Add`，dst 轮转且 dst==src1 时触发 vector core exception；累加器放 src0 位（dst==src0）则安全**。顺序发射时 dst==src1 无恙。
+7. **回退及原因**：整体回退——收益噪声级、112 条标量发射/行 vs legacy 1 条（issue 侧反而更重）、+1.75KB UB；负结果与机理留档，避免未来重复推导。
 
 ### 4.7 总收益与最终状态
 
@@ -248,7 +300,25 @@ NPUGraph：@2048 109.3→**86.7µs**（**-20.7%**），@4096 -21.9%，@512 -7.8%
 
 fp16（MULTI_N 折叠保留）：@2048 63.0→60.4µs（-4.1%）。vs unfused ref：bf16 @2048 快 29%（基线仅快 6.5%）。
 
-**最终状态**（msprof，2048×7168 bf16，40 核均值，墙钟 89.4µs）：vec busy 89.3%、scalar_wait 2%、MTE2/MTE3 全部隐藏（三线并行度 2.87）；搬运 117MB ≈ 1.36TB/s，**已达 HBM 峰值带宽的 ~85%**——理论地板 ~73µs，V 侧进一步优化被带宽墙截胡，收益空间收敛到 decode 预取等 issue/延迟方向。
+**最终状态**（msprof，2048×7168 bf16，40 核均值，墙钟 89.4µs）：vec busy 89.3%、scalar_wait 2%、三线并行度 2.87。MTE2/MTE3 搬运大部分与向量计算重叠，未单独落入最终关键路径（各 pipe 统计时间上重叠，非互斥占比）。
+
+**关键路径分解**（2048×7168 bf16，十进制单位）：
+
+| 项 | 值 | 推导 |
+|---|---:|---|
+| 总搬运量 | 117.4 MB | 读 x1+x2 + 写 x+y = 4 × 2048×7168×2B = 117.4 MB（rstd 8KB 可忽略） |
+| 理论 HBM 下限 | 73.4 µs | 117.4 MB ÷ 名义峰值 1.6 TB/s（设备规格值，非实测） |
+| 实测向量占用 | 77.4 µs | msprof vec busy；R5 实验证明其中依赖延迟成分 ≈ 0（见 §4.6） |
+| 实际墙钟 | 89.4 µs | 重叠后的关键路径 |
+
+有效带宽 = 117.4 MB ÷ 89.4 µs ≈ **1.31 TB/s**（十进制），为名义峰值的 ~82%——带宽与向量流水接近转折区，剩余 21.8% 的墙钟-下限差距由 ramp/尾行排空、装载/落盘非完美重叠与 DataCopyPad 短粒度构成。**继续削减 V 指令为何没有等比例兑现**：R5 实验直接证伪——把 reduce 依赖"延迟"消掉后 vec busy 分毫未降（多 repeat 累加硬件内部按吞吐执行），同时墙钟受带宽下限托底；两条下限（73.4 / 77.4）与墙钟的差已 <15%，V 侧微优化的可兑现空间收敛到 decode 预取等 issue/延迟方向。
+
+**decode 与 prefill 分列**（量级与机制不同，不共用一张纵轴）：
+
+| 档位 | 机制 | 基线 → 终值 | 说明 |
+|---|---|---|---|
+| decode 1/4/16 tok（SINGLE_N） | 发射+延迟混合瓶颈 | 3.36→3.46 / 3.70→3.87 / 5.32→5.69 | µs 级噪声带内；剩余候选=γ/β 装载并行预取（§4.4③ 的 SINGLE_N 部分） |
+| prefill 512-4096 tok（NORMAL/MULTI_N） | 带宽+向量流水 | 上表 | 本报告主体 |
 
 ---
 
@@ -280,3 +350,53 @@ fp16（MULTI_N 折叠保留）：@2048 63.0→60.4µs（-4.1%）。vs unfused re
 7. **溢出域也是契约**：数学等价变换要区分"舍入路径 ~1ulp"与"溢出域改变"两类——前者可接受（golden 自身求和顺序也不同），后者必须回退或有界证明（fp16 的 max raw sum 可静态证明远离 fp32 上限，故折叠保留）；
 8. **硬件行为要实验裁定，直觉会让路**：reduce 依赖链重构是教科书式优化，上板零收益（多 repeat 累加硬件内部按吞吐执行）；而"acc 在 src1 位的交错累加会 fault、放 src0 安全"这种文档没有的雷，只有设备实验能暴露。负结果与其机理同样留档；
 9. **环境先于归因**：共享宿主机 loadavg 飙到 200+ 时，测试超时、vector core 异常、离谱波动都可能是 CPU 饥饿的产物——`/proc/loadavg` 一条命令先排除环境，再怀疑 kernel。
+
+---
+
+## 6. 附录
+
+### 6.1 复现信息
+
+| 项 | 值 |
+|---|---|
+| 仓库 / 分支 | vllm-ascend @ `add-rms-norm-bias-perf`（基线 7dcbbe56a → 终值 d7132b0d5） |
+| CANN / 驱动 | CANN 9.1.0；npu-smi 25.5.1（驱动/固件随包） |
+| 编译 | `bash csrc/build_aclnn.sh $(pwd) ascend910b` → `pip install -e . --no-build-isolation`；**改 kernel 前必须清 build 树**（`csrc/build/binary/ascend910b/{src,bin}/add_rms_norm_bias` + `gen/*_ascend910b_*.done`，src_copy 不追踪源文件改动） |
+| 安装自检 | 仓库源与 `csrc/build/.../src/add_rms_norm_bias/op_kernel/*.h` md5 一致，.o mtime 晚于源 |
+| 设备 | 910B3，40 AIV，默认频率（OpBasicInfo.csv 记录 1800MHz）；共享宿主机，**loadavg 需 <100**（本战役 200+ 时两组数据作废） |
+| 计时口径 | NPUGraph capture+replay：warmup 3 次 → capture（自适应 batch）→ replay 5 样本取中位；脚本 `benchmarks/add_rms_norm_bias.py` |
+| 管线归因 | `env -u ASCEND_RT_VISIBLE_DEVICES msprof op --warm-up=10 --launch-count=1 --kernel-name=AddRmsNormBias --aic-metrics=PipeUtilization python benchmarks/add_rms_norm_bias_msprof.py <tokens>`（指令级流水图换 `--aic-metrics=TimelineDetail`） |
+| 精度 | `pytest tests/e2e/nightly/single_node/ops/singlecard_ops/test_add_rms_norm_bias{,_strict}.py -q` |
+| 原始数据 | 仓内 `profiling_addnorm_*/`（PipeUtilization CSV）、`traces/`（指令级 TimelineDetail + README）、`ADD_RMS_NORM_BIAS_OPT_NOTES.md`（逐轮全量记录） |
+
+一条命令复测关键数据：`python benchmarks/add_rms_norm_bias.py`（输出 9 档 × bf16/fp16 的 fused 与 ref 两列 JSON）。
+
+### 6.2 统计口径与噪声
+
+- 表中数值为 5 样本中位数（开发期口径）；关键档位均有 ≥2 次独立复测，**≥512 档轮间差 <1%**，1-128 档绝对波动 ±0.1~1.2µs（±1~10%）——因此小档结论以"噪声带内/持平"表述，不报百分比收益；
+- 未动代码的 fp16 路径为噪声金丝雀：其同轮波动即噪声带定义；
+- 各 pipe busy/wait 统计时间上重叠，非互斥占比，不可相加。
+
+### 6.3 最终变体覆盖矩阵
+
+| dtype | shape 范围 | 变体（key） | 是否修改 | 性能结论 | 严格测试 |
+|---|---|---|---|---|---|
+| bf16 | rows≤40 | SINGLE_N（33） | 是（消 V_S+折叠） | decode 1-4 tok -2.6~-3.9% | 通过 |
+| bf16 | rows≥41 | NORMAL（30） | 是（流水化重写） | @2048 -24.8%、@4096 -26.8% | 通过 |
+| fp16 | rows≤40 | SINGLE_N（13） | 是（同 bf16 改动） | 档位噪声带内 | 通过 |
+| fp16 | rows≥41 | MULTI_N（14） | 是（折叠 1/N） | @2048 -4.1% | 通过 |
+| fp16/fp32 | 中宽非对齐 col | NORMAL（10/20） | 部分（第一轮减法，未流水化） | 测试形状覆盖，无生产 shape | 通过 |
+| bf16 | col≤5120 rows≥41 | MULTI_N（34） | 是（共用 ComputeRstd） | 测试形状覆盖 | 通过 |
+| col≤2000 | 全 dtype | MERGE_N（*2） | 否 | 小列宽，无生产 shape | 通过（未优化） |
+| col>11264 | 全 dtype | SPLIT_D（*1） | 否（休眠，接 8192 回退） | 回退路径已验证 | 边界通过 |
+
+### 6.4 实现约束与维护红线
+
+1. 事件发射条件必须与消费条件严格一致（`i+2 < rowWork` 一类守卫），kernel 退出时不得遗留在途事件（悬挂标志毒化同核下一个 kernel）；
+2. 事件一律 `AllocEventID/SetFlag/WaitFlag/ReleaseEventID` 四件套，禁止 `FetchEventID` 承担多在途语义（连续 fetch 返回同 ID）；
+3. 双缓冲槽位一律使用**局部行号**奇偶（`i & 1`），绝对行号会错位产生 NaN；
+4. 归约的累加器若用于交错发射，必须放 **src0** 操作数位（dst==src1 的交错轮转在 c220 上 fault）；
+5. 修改 rstd 压缩逻辑必须覆盖 rows>8 与全部尾块场景（Gather 偏移按字节逐元素消费）；
+6. UB 预算由 host tiling 成本模型计算（`DetermineModeParameters`），kernel 不自行假设；新增/删除缓冲必须同步更新 fixedBytes 常量并用 col=8192 边界用例验证回退；
+7. 逐元素 V 操作的 dst/src 必须天然 32B 对齐（对不上用标量 SetValue + S_V 同步，不要硬上 V store）；
+8. c220 实证行为（§4.6 两条）不得直接外推到其他架构（A5 regbase 路径另有实现）；修改融合算子数值路径前，先核对 golden 的溢出域与舍入契约（§4.5 #3）。
