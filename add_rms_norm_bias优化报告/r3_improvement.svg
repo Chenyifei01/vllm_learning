@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="330" viewBox="0 0 780 330" role="img" aria-label="第三轮各档位提升率（相对第二轮；正为更快）">
+  <style>
+    .surf { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .mut { fill: #898781; }
+    .grid { stroke: #e1e0d9; stroke-width: 1; } .bline { stroke: #c3c2b7; stroke-width: 1; }
+    .s1 { fill: #2a78d6; stroke: #2a78d6; } .s2 { fill: #eb6834; stroke: #eb6834; } .s3 { fill: #1baf7a; stroke: #1baf7a; }
+    .s4 { fill: #eda100; stroke: #eda100; } .s5 { fill: #e87ba4; stroke: #e87ba4; }
+    .neg { fill: #e34948; stroke: #e34948; }
+    text { font-family: system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif; }
+    @media (prefers-color-scheme: dark) {
+      .surf { fill: #1a1a19; } .ink { fill: #ffffff; } .ink2 { fill: #c3c2b7; } .mut { fill: #898781; }
+      .grid { stroke: #2c2c2a; } .bline { stroke: #383835; }
+      .s1 { fill: #3987e5; stroke: #3987e5; } .s2 { fill: #d95926; stroke: #d95926; } .s3 { fill: #199e70; stroke: #199e70; }
+      .s4 { fill: #c98500; stroke: #c98500; } .s5 { fill: #d55181; stroke: #d55181; }
+      .neg { fill: #e66767; stroke: #e66767; }
+    }
+  </style>
+<rect class="surf" x="0" y="0" width="780" height="330"/>
+<text class="ink" x="24" y="30" font-size="15" font-weight="600">第三轮各档位提升率（相对第二轮；正为更快）</text>
+
+<text class="ink2" x="24" y="48" font-size="12" text-anchor="start">NPUGraph，hidden=7168；fp16@4096 为噪声带内的负读数</text>
+<line class="grid" x1="56" y1="78" x2="760" y2="78"/>
+<line class="grid" x1="56" y1="288" x2="760" y2="288"/>
+<line class="bline" x1="56" y1="183" x2="760" y2="183"/>
+<text class="mut" x="48" y="82.9090909090909" font-size="11" text-anchor="end">+5%</text>
+<text class="mut" x="48" y="292.0" font-size="11" text-anchor="end">-5%</text>
+<text class="mut" x="48" y="187.45454545454544" font-size="11" text-anchor="end">0%</text>
+<path class="s1" d="M119,183 L119,135 Q119,131 123,131 L139,131 Q143,131 143,135 L143,183 Z"/>
+<text class="ink2" x="131.0" y="125.18181818181819" font-size="11" text-anchor="middle">+2.5%</text>
+<path class="s2" d="M145,183 L145,97 Q145,93 149,93 L165,93 Q169,93 169,97 L169,183 Z"/>
+<text class="ink2" x="157.0" y="87.54545454545456" font-size="11" text-anchor="middle">+4.3%</text>
+<text class="mut" x="144.0" y="304" font-size="11" text-anchor="middle">512</text>
+<path class="s1" d="M295,183 L295,149 Q295,145 299,145 L315,145 Q319,145 319,149 L319,183 Z"/>
+<text class="ink2" x="307.0" y="139.8181818181818" font-size="11" text-anchor="middle">+1.8%</text>
+<path class="s2" d="M321,183 L321,78 Q321,74 325,74 L341,74 Q345,74 345,78 L345,183 Z"/>
+<text class="ink2" x="333.0" y="68.72727272727272" font-size="11" text-anchor="middle">+5.2%</text>
+<text class="mut" x="320.0" y="304" font-size="11" text-anchor="middle">1024</text>
+<path class="s1" d="M471,183 L471,168 Q471,164 475,164 L491,164 Q495,164 495,168 L495,183 Z"/>
+<text class="ink2" x="483.0" y="158.63636363636363" font-size="11" text-anchor="middle">+0.9%</text>
+<path class="s2" d="M497,183 L497,78 Q497,74 501,74 L517,74 Q521,74 521,78 L521,183 Z"/>
+<text class="ink2" x="509.0" y="68.72727272727272" font-size="11" text-anchor="middle">+5.2%</text>
+<text class="mut" x="496.0" y="304" font-size="11" text-anchor="middle">2048</text>
+<path class="s1" d="M647,183 L647,183 Q647,179 651,179 L667,179 Q671,179 671,183 L671,183 Z"/>
+<text class="ink2" x="659.0" y="173.27272727272725" font-size="11" text-anchor="middle">+0.2%</text>
+<path class="s2" d="M673,183 L673,250 Q677,250 697,250 L697,179 Q697,183 693,183 L673,183 Z"/>
+<text class="ink2" x="685.0" y="264.3636363636364" font-size="11" text-anchor="middle">-3.2%</text>
+<text class="mut" x="672.0" y="304" font-size="11" text-anchor="middle">4096</text>
+<rect class="s1" x="56" y="24" width="12" height="12" rx="2"/>
+<text class="ink2" x="74" y="34" font-size="12" text-anchor="start">bf16</text>
+<rect class="s2" x="122" y="24" width="12" height="12" rx="2"/>
+<text class="ink2" x="140" y="34" font-size="12" text-anchor="start">fp16</text>
+<text class="mut" x="760" y="304" font-size="11" text-anchor="end">tokens</text>
+</svg>

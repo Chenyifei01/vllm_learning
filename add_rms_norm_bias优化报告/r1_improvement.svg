@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="330" viewBox="0 0 860 330" role="img" aria-label="第一轮各档位提升率（bf16，基线 → 检视修复前一轮；正为更快）">
+  <style>
+    .surf { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .mut { fill: #898781; }
+    .grid { stroke: #e1e0d9; stroke-width: 1; } .bline { stroke: #c3c2b7; stroke-width: 1; }
+    .s1 { fill: #2a78d6; stroke: #2a78d6; } .s2 { fill: #eb6834; stroke: #eb6834; } .s3 { fill: #1baf7a; stroke: #1baf7a; }
+    .s4 { fill: #eda100; stroke: #eda100; } .s5 { fill: #e87ba4; stroke: #e87ba4; }
+    .neg { fill: #e34948; stroke: #e34948; }
+    text { font-family: system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif; }
+    @media (prefers-color-scheme: dark) {
+      .surf { fill: #1a1a19; } .ink { fill: #ffffff; } .ink2 { fill: #c3c2b7; } .mut { fill: #898781; }
+      .grid { stroke: #2c2c2a; } .bline { stroke: #383835; }
+      .s1 { fill: #3987e5; stroke: #3987e5; } .s2 { fill: #d95926; stroke: #d95926; } .s3 { fill: #199e70; stroke: #199e70; }
+      .s4 { fill: #c98500; stroke: #c98500; } .s5 { fill: #d55181; stroke: #d55181; }
+      .neg { fill: #e66767; stroke: #e66767; }
+    }
+  </style>
+<rect class="surf" x="0" y="0" width="860" height="330"/>
+<text class="ink" x="24" y="30" font-size="15" font-weight="600">第一轮各档位提升率（bf16，基线 → 检视修复前一轮；正为更快）</text>
+
+<text class="ink2" x="24" y="48" font-size="12" text-anchor="start">NPUGraph，hidden=7168；提升率 = (基线 − 优化后)/基线</text>
+<line class="grid" x1="56" y1="134" x2="840" y2="134"/>
+<line class="grid" x1="56" y1="288" x2="840" y2="288"/>
+<line class="bline" x1="56" y1="211" x2="840" y2="211"/>
+<text class="mut" x="48" y="138.66666666666666" font-size="11" text-anchor="end">+5%</text>
+<text class="mut" x="48" y="292.0" font-size="11" text-anchor="end">-5%</text>
+<text class="mut" x="48" y="215.33333333333331" font-size="11" text-anchor="end">0%</text>
+<path class="neg" d="M87,211 L87,261 Q91,261 111,261 L111,207 Q111,211 107,211 L87,211 Z"/>
+<text class="ink2" x="99.55555555555556" y="275.93333333333334" font-size="11" text-anchor="middle">-3.3%</text>
+<text class="mut" x="99.55555555555556" y="304" font-size="11" text-anchor="middle">1</text>
+<path class="neg" d="M174,211 L174,245 Q178,245 198,245 L198,207 Q198,211 194,211 L174,211 Z"/>
+<text class="ink2" x="186.66666666666669" y="259.0666666666666" font-size="11" text-anchor="middle">-2.2%</text>
+<text class="mut" x="186.66666666666669" y="304" font-size="11" text-anchor="middle">4</text>
+<path class="neg" d="M261,211 L261,217 Q265,217 285,217 L285,207 Q285,211 281,211 L261,211 Z"/>
+<text class="ink2" x="273.77777777777777" y="231.46666666666667" font-size="11" text-anchor="middle">-0.4%</text>
+<text class="mut" x="273.77777777777777" y="304" font-size="11" text-anchor="middle">16</text>
+<path class="s1" d="M348,211 L348,158 Q348,154 352,154 L368,154 Q372,154 372,158 L372,211 Z"/>
+<text class="ink2" x="360.8888888888889" y="148.6" font-size="11" text-anchor="middle">+3.7%</text>
+<text class="mut" x="360.8888888888889" y="304" font-size="11" text-anchor="middle">64</text>
+<path class="s1" d="M436,211 L436,155 Q436,151 440,151 L456,151 Q460,151 460,155 L460,211 Z"/>
+<text class="ink2" x="448.0" y="145.5333333333333" font-size="11" text-anchor="middle">+3.9%</text>
+<text class="mut" x="448.0" y="304" font-size="11" text-anchor="middle">128</text>
+<path class="s1" d="M523,211 L523,108 Q523,104 527,104 L543,104 Q547,104 547,108 L547,211 Z"/>
+<text class="ink2" x="535.1111111111111" y="98.0" font-size="11" text-anchor="middle">+7.0%</text>
+<text class="mut" x="535.1111111111111" y="304" font-size="11" text-anchor="middle">512</text>
+<path class="s1" d="M610,211 L610,89 Q610,85 614,85 L630,85 Q634,85 634,89 L634,211 Z"/>
+<text class="ink2" x="622.2222222222223" y="79.60000000000001" font-size="11" text-anchor="middle">+8.2%</text>
+<text class="mut" x="622.2222222222223" y="304" font-size="11" text-anchor="middle">1024</text>
+<path class="s1" d="M697,211 L697,86 Q697,82 701,82 L717,82 Q721,82 721,86 L721,211 Z"/>
+<text class="ink2" x="709.3333333333334" y="76.53333333333333" font-size="11" text-anchor="middle">+8.4%</text>
+<text class="mut" x="709.3333333333334" y="304" font-size="11" text-anchor="middle">2048</text>
+<path class="s1" d="M784,211 L784,94 Q784,90 788,90 L804,90 Q808,90 808,94 L808,211 Z"/>
+<text class="ink2" x="796.4444444444445" y="84.19999999999999" font-size="11" text-anchor="middle">+7.9%</text>
+<text class="mut" x="796.4444444444445" y="304" font-size="11" text-anchor="middle">4096</text>
+<text class="mut" x="840" y="304" font-size="11" text-anchor="end">tokens</text>
+<text class="mut" x="48" y="52" font-size="11" text-anchor="end">提升率</text>
+</svg>
