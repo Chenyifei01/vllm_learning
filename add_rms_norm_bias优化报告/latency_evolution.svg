@@ -1,11 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="880" height="460" viewBox="0 0 880 460" role="img" aria-label="各版本时延演进（bf16，hidden=7168，NPUGraph）">
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="470" viewBox="0 0 880 470" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+  <title id="title">各版本时延演进</title>
+  <desc id="desc">bf16、hidden 等于 7168 的 NPUGraph 测量结果。随着优化推进，2048 token 时延由 119.4 微秒降至 89.8 微秒，4096 token 由 250.9 微秒降至 183.7 微秒。</desc>
   <style>
     .surf { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .mut { fill: #898781; }
     .grid { stroke: #e1e0d9; stroke-width: 1; } .bline { stroke: #c3c2b7; stroke-width: 1; }
     .s1 { fill: #2a78d6; stroke: #2a78d6; } .s2 { fill: #eb6834; stroke: #eb6834; } .s3 { fill: #1baf7a; stroke: #1baf7a; }
     .s4 { fill: #eda100; stroke: #eda100; } .s5 { fill: #e87ba4; stroke: #e87ba4; }
     .neg { fill: #e34948; stroke: #e34948; }
-    text { font-family: system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif; }
+    text { font-family: 'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Segoe UI',Arial,sans-serif; }
+    polyline { fill: none !important; }
     @media (prefers-color-scheme: dark) {
       .surf { fill: #1a1a19; } .ink { fill: #ffffff; } .ink2 { fill: #c3c2b7; } .mut { fill: #898781; }
       .grid { stroke: #2c2c2a; } .bline { stroke: #383835; }
@@ -40,68 +43,68 @@
 <text class="mut" x="644.0" y="432" font-size="11" text-anchor="middle">1024</text>
 <text class="mut" x="702.0" y="432" font-size="11" text-anchor="middle">2048</text>
 <text class="mut" x="760.0" y="432" font-size="11" text-anchor="middle">4096</text>
-<text class="mut" x="800" y="432" font-size="11" text-anchor="end">tokens</text>
+<text class="mut" x="432" y="454" font-size="11" text-anchor="middle">tokens</text>
 <text class="mut" x="56" y="78" font-size="11" text-anchor="end">µs</text>
 <polyline class="s1" points="64.0,409.7 180.0,409.3 296.0,407.2 412.0,401.2 470.0,396.3 586.0,371.9 644.0,339.1 702.0,262.4 760.0,95.6" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline class="s2" points="64.0,409.6 180.0,409.2 296.0,407.2 412.0,401.7 470.0,397.0 586.0,374.9 644.0,345.2 702.0,275.2 760.0,120.6" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline class="s3" points="64.0,409.6 180.0,409.1 296.0,407.2 412.0,401.2 470.0,396.7 586.0,377.9 644.0,353.2 702.0,304.0 760.0,184.8" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline class="s4" points="64.0,409.8 180.0,409.3 296.0,407.2 412.0,401.2 470.0,397.4 586.0,378.8 644.0,354.3 702.0,304.9 760.0,185.2" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline class="s5" points="64.0,409.6 180.0,409.1 296.0,406.8 412.0,400.3 470.0,396.3 586.0,376.7 644.0,351.2 702.0,300.0 760.0,180.9" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle class="s1 ring" cx="64.0" cy="409.7" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s1 ring" cx="180.0" cy="409.3" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s1 ring" cx="296.0" cy="407.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s1 ring" cx="412.0" cy="401.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s1 ring" cx="470.0" cy="396.3" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s1 ring" cx="586.0" cy="371.9" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s1 ring" cx="644.0" cy="339.1" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s1 ring" cx="702.0" cy="262.4" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s1 ring" cx="760.0" cy="95.6" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s2 ring" cx="64.0" cy="409.6" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s2 ring" cx="180.0" cy="409.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s2 ring" cx="296.0" cy="407.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s2 ring" cx="412.0" cy="401.7" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s2 ring" cx="470.0" cy="397.0" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s2 ring" cx="586.0" cy="374.9" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s2 ring" cx="644.0" cy="345.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s2 ring" cx="702.0" cy="275.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s2 ring" cx="760.0" cy="120.6" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s3 ring" cx="64.0" cy="409.6" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s3 ring" cx="180.0" cy="409.1" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s3 ring" cx="296.0" cy="407.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s3 ring" cx="412.0" cy="401.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s3 ring" cx="470.0" cy="396.7" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s3 ring" cx="586.0" cy="377.9" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s3 ring" cx="644.0" cy="353.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s3 ring" cx="702.0" cy="304.0" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s3 ring" cx="760.0" cy="184.8" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s4 ring" cx="64.0" cy="409.8" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s4 ring" cx="180.0" cy="409.3" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s4 ring" cx="296.0" cy="407.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s4 ring" cx="412.0" cy="401.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s4 ring" cx="470.0" cy="397.4" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s4 ring" cx="586.0" cy="378.8" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s4 ring" cx="644.0" cy="354.3" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s4 ring" cx="702.0" cy="304.9" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s4 ring" cx="760.0" cy="185.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s5 ring" cx="64.0" cy="409.6" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s5 ring" cx="180.0" cy="409.1" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s5 ring" cx="296.0" cy="406.8" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s5 ring" cx="412.0" cy="400.3" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s5 ring" cx="470.0" cy="396.3" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s5 ring" cx="586.0" cy="376.7" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s5 ring" cx="644.0" cy="351.2" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s5 ring" cx="702.0" cy="300.0" r="4" stroke-width="2" stroke="%23SURF%"/>
-<circle class="s5 ring" cx="760.0" cy="180.9" r="4" stroke-width="2" stroke="%23SURF%"/>
+<circle class="s1 ring" cx="64.0" cy="409.7" r="4" stroke-width="2"/>
+<circle class="s1 ring" cx="180.0" cy="409.3" r="4" stroke-width="2"/>
+<circle class="s1 ring" cx="296.0" cy="407.2" r="4" stroke-width="2"/>
+<circle class="s1 ring" cx="412.0" cy="401.2" r="4" stroke-width="2"/>
+<circle class="s1 ring" cx="470.0" cy="396.3" r="4" stroke-width="2"/>
+<circle class="s1 ring" cx="586.0" cy="371.9" r="4" stroke-width="2"/>
+<circle class="s1 ring" cx="644.0" cy="339.1" r="4" stroke-width="2"/>
+<circle class="s1 ring" cx="702.0" cy="262.4" r="4" stroke-width="2"/>
+<circle class="s1 ring" cx="760.0" cy="95.6" r="4" stroke-width="2"/>
+<circle class="s2 ring" cx="64.0" cy="409.6" r="4" stroke-width="2"/>
+<circle class="s2 ring" cx="180.0" cy="409.2" r="4" stroke-width="2"/>
+<circle class="s2 ring" cx="296.0" cy="407.2" r="4" stroke-width="2"/>
+<circle class="s2 ring" cx="412.0" cy="401.7" r="4" stroke-width="2"/>
+<circle class="s2 ring" cx="470.0" cy="397.0" r="4" stroke-width="2"/>
+<circle class="s2 ring" cx="586.0" cy="374.9" r="4" stroke-width="2"/>
+<circle class="s2 ring" cx="644.0" cy="345.2" r="4" stroke-width="2"/>
+<circle class="s2 ring" cx="702.0" cy="275.2" r="4" stroke-width="2"/>
+<circle class="s2 ring" cx="760.0" cy="120.6" r="4" stroke-width="2"/>
+<circle class="s3 ring" cx="64.0" cy="409.6" r="4" stroke-width="2"/>
+<circle class="s3 ring" cx="180.0" cy="409.1" r="4" stroke-width="2"/>
+<circle class="s3 ring" cx="296.0" cy="407.2" r="4" stroke-width="2"/>
+<circle class="s3 ring" cx="412.0" cy="401.2" r="4" stroke-width="2"/>
+<circle class="s3 ring" cx="470.0" cy="396.7" r="4" stroke-width="2"/>
+<circle class="s3 ring" cx="586.0" cy="377.9" r="4" stroke-width="2"/>
+<circle class="s3 ring" cx="644.0" cy="353.2" r="4" stroke-width="2"/>
+<circle class="s3 ring" cx="702.0" cy="304.0" r="4" stroke-width="2"/>
+<circle class="s3 ring" cx="760.0" cy="184.8" r="4" stroke-width="2"/>
+<circle class="s4 ring" cx="64.0" cy="409.8" r="4" stroke-width="2"/>
+<circle class="s4 ring" cx="180.0" cy="409.3" r="4" stroke-width="2"/>
+<circle class="s4 ring" cx="296.0" cy="407.2" r="4" stroke-width="2"/>
+<circle class="s4 ring" cx="412.0" cy="401.2" r="4" stroke-width="2"/>
+<circle class="s4 ring" cx="470.0" cy="397.4" r="4" stroke-width="2"/>
+<circle class="s4 ring" cx="586.0" cy="378.8" r="4" stroke-width="2"/>
+<circle class="s4 ring" cx="644.0" cy="354.3" r="4" stroke-width="2"/>
+<circle class="s4 ring" cx="702.0" cy="304.9" r="4" stroke-width="2"/>
+<circle class="s4 ring" cx="760.0" cy="185.2" r="4" stroke-width="2"/>
+<circle class="s5 ring" cx="64.0" cy="409.6" r="4" stroke-width="2"/>
+<circle class="s5 ring" cx="180.0" cy="409.1" r="4" stroke-width="2"/>
+<circle class="s5 ring" cx="296.0" cy="406.8" r="4" stroke-width="2"/>
+<circle class="s5 ring" cx="412.0" cy="400.3" r="4" stroke-width="2"/>
+<circle class="s5 ring" cx="470.0" cy="396.3" r="4" stroke-width="2"/>
+<circle class="s5 ring" cx="586.0" cy="376.7" r="4" stroke-width="2"/>
+<circle class="s5 ring" cx="644.0" cy="351.2" r="4" stroke-width="2"/>
+<circle class="s5 ring" cx="702.0" cy="300.0" r="4" stroke-width="2"/>
+<circle class="s5 ring" cx="760.0" cy="180.9" r="4" stroke-width="2"/>
 <text class="ink2" x="806" y="99.56269230769232" font-size="11" text-anchor="start">基线 250.9</text>
 <text class="ink2" x="806" y="184.90576923076924" font-size="11" text-anchor="start">终值 183.7</text>
-<line class="s1" x1="64" y1="50" x2="86" y2="50" stroke-width="3"/>
-<text class="ink2" x="92" y="54" font-size="12" text-anchor="start">基线</text>
-<line class="s2" x1="140" y1="50" x2="162" y2="50" stroke-width="3"/>
-<text class="ink2" x="168" y="54" font-size="12" text-anchor="start">第一轮</text>
-<line class="s3" x1="229" y1="50" x2="251" y2="50" stroke-width="3"/>
-<text class="ink2" x="257" y="54" font-size="12" text-anchor="start">第二轮</text>
-<line class="s4" x1="318" y1="50" x2="340" y2="50" stroke-width="3"/>
-<text class="ink2" x="346" y="54" font-size="12" text-anchor="start">第三轮</text>
-<line class="s5" x1="407" y1="50" x2="429" y2="50" stroke-width="3"/>
-<text class="ink2" x="435" y="54" font-size="12" text-anchor="start">检视修复后</text>
+<line class="s1" x1="64" y1="72" x2="86" y2="72" stroke-width="3"/>
+<text class="ink2" x="92" y="76" font-size="12" text-anchor="start">基线</text>
+<line class="s2" x1="140" y1="72" x2="162" y2="72" stroke-width="3"/>
+<text class="ink2" x="168" y="76" font-size="12" text-anchor="start">第一轮</text>
+<line class="s3" x1="229" y1="72" x2="251" y2="72" stroke-width="3"/>
+<text class="ink2" x="257" y="76" font-size="12" text-anchor="start">第二轮</text>
+<line class="s4" x1="318" y1="72" x2="340" y2="72" stroke-width="3"/>
+<text class="ink2" x="346" y="76" font-size="12" text-anchor="start">第三轮</text>
+<line class="s5" x1="407" y1="72" x2="429" y2="72" stroke-width="3"/>
+<text class="ink2" x="435" y="76" font-size="12" text-anchor="start">检视修复后</text>
 </svg>

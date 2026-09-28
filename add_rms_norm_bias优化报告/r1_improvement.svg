@@ -1,11 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="860" height="330" viewBox="0 0 860 330" role="img" aria-label="第一轮各档位提升率（bf16，基线 → 检视修复前一轮；正为更快）">
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="350" viewBox="0 0 860 350" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+  <title id="title">第一轮各档位提升率</title>
+  <desc id="desc">bf16，hidden 等于 7168。小 token 档略有回退，512 至 4096 token 提升约 7% 至 8.4%。</desc>
   <style>
     .surf { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .mut { fill: #898781; }
     .grid { stroke: #e1e0d9; stroke-width: 1; } .bline { stroke: #c3c2b7; stroke-width: 1; }
     .s1 { fill: #2a78d6; stroke: #2a78d6; } .s2 { fill: #eb6834; stroke: #eb6834; } .s3 { fill: #1baf7a; stroke: #1baf7a; }
     .s4 { fill: #eda100; stroke: #eda100; } .s5 { fill: #e87ba4; stroke: #e87ba4; }
     .neg { fill: #e34948; stroke: #e34948; }
-    text { font-family: system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif; }
+    text { font-family: 'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Segoe UI',Arial,sans-serif; }
     @media (prefers-color-scheme: dark) {
       .surf { fill: #1a1a19; } .ink { fill: #ffffff; } .ink2 { fill: #c3c2b7; } .mut { fill: #898781; }
       .grid { stroke: #2c2c2a; } .bline { stroke: #383835; }
@@ -14,8 +16,8 @@
       .neg { fill: #e66767; stroke: #e66767; }
     }
   </style>
-<rect class="surf" x="0" y="0" width="860" height="330"/>
-<text class="ink" x="24" y="30" font-size="15" font-weight="600">第一轮各档位提升率（bf16，基线 → 检视修复前一轮；正为更快）</text>
+<rect class="surf" x="0" y="0" width="860" height="350"/>
+<text class="ink" x="24" y="30" font-size="15" font-weight="600">第一轮各档位提升率（bf16，基线 → 第一轮；正为更快）</text>
 
 <text class="ink2" x="24" y="48" font-size="12" text-anchor="start">NPUGraph，hidden=7168；提升率 = (基线 − 优化后)/基线</text>
 <line class="grid" x1="56" y1="134" x2="840" y2="134"/>
@@ -51,6 +53,6 @@
 <path class="s1" d="M784,211 L784,94 Q784,90 788,90 L804,90 Q808,90 808,94 L808,211 Z"/>
 <text class="ink2" x="796.4444444444445" y="84.19999999999999" font-size="11" text-anchor="middle">+7.9%</text>
 <text class="mut" x="796.4444444444445" y="304" font-size="11" text-anchor="middle">4096</text>
-<text class="mut" x="840" y="304" font-size="11" text-anchor="end">tokens</text>
-<text class="mut" x="48" y="52" font-size="11" text-anchor="end">提升率</text>
+<text class="mut" x="448" y="330" font-size="11" text-anchor="middle">tokens</text>
+<text class="mut" x="18" y="211" font-size="11" text-anchor="middle" transform="rotate(-90 18 211)">提升率</text>
 </svg>

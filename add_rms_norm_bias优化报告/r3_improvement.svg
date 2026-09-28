@@ -1,11 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="780" height="330" viewBox="0 0 780 330" role="img" aria-label="第三轮各档位提升率（相对第二轮；正为更快）">
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="390" viewBox="0 0 780 390" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+  <title id="title">第三轮各档位提升率</title>
+  <desc id="desc">相对第二轮，bf16 在 512 至 4096 token 基本持平，fp16 在 512 至 2048 token 提升约 4.3% 至 5.2%，4096 token 的负读数位于噪声带内。</desc>
   <style>
     .surf { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .mut { fill: #898781; }
     .grid { stroke: #e1e0d9; stroke-width: 1; } .bline { stroke: #c3c2b7; stroke-width: 1; }
     .s1 { fill: #2a78d6; stroke: #2a78d6; } .s2 { fill: #eb6834; stroke: #eb6834; } .s3 { fill: #1baf7a; stroke: #1baf7a; }
     .s4 { fill: #eda100; stroke: #eda100; } .s5 { fill: #e87ba4; stroke: #e87ba4; }
     .neg { fill: #e34948; stroke: #e34948; }
-    text { font-family: system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif; }
+    text { font-family: 'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Segoe UI',Arial,sans-serif; }
     @media (prefers-color-scheme: dark) {
       .surf { fill: #1a1a19; } .ink { fill: #ffffff; } .ink2 { fill: #c3c2b7; } .mut { fill: #898781; }
       .grid { stroke: #2c2c2a; } .bline { stroke: #383835; }
@@ -14,10 +16,11 @@
       .neg { fill: #e66767; stroke: #e66767; }
     }
   </style>
-<rect class="surf" x="0" y="0" width="780" height="330"/>
+<rect class="surf" x="0" y="0" width="780" height="390"/>
 <text class="ink" x="24" y="30" font-size="15" font-weight="600">第三轮各档位提升率（相对第二轮；正为更快）</text>
 
 <text class="ink2" x="24" y="48" font-size="12" text-anchor="start">NPUGraph，hidden=7168；fp16@4096 为噪声带内的负读数</text>
+<g transform="translate(0 30)">
 <line class="grid" x1="56" y1="78" x2="760" y2="78"/>
 <line class="grid" x1="56" y1="288" x2="760" y2="288"/>
 <line class="bline" x1="56" y1="183" x2="760" y2="183"/>
@@ -44,9 +47,10 @@
 <path class="s2" d="M673,183 L673,250 Q677,250 697,250 L697,179 Q697,183 693,183 L673,183 Z"/>
 <text class="ink2" x="685.0" y="264.3636363636364" font-size="11" text-anchor="middle">-3.2%</text>
 <text class="mut" x="672.0" y="304" font-size="11" text-anchor="middle">4096</text>
-<rect class="s1" x="56" y="24" width="12" height="12" rx="2"/>
-<text class="ink2" x="74" y="34" font-size="12" text-anchor="start">bf16</text>
-<rect class="s2" x="122" y="24" width="12" height="12" rx="2"/>
-<text class="ink2" x="140" y="34" font-size="12" text-anchor="start">fp16</text>
-<text class="mut" x="760" y="304" font-size="11" text-anchor="end">tokens</text>
+</g>
+<rect class="s1" x="56" y="62" width="12" height="12" rx="2"/>
+<text class="ink2" x="74" y="72" font-size="12" text-anchor="start">bf16</text>
+<rect class="s2" x="122" y="62" width="12" height="12" rx="2"/>
+<text class="ink2" x="140" y="72" font-size="12" text-anchor="start">fp16</text>
+<text class="mut" x="408" y="375" font-size="11" text-anchor="middle">tokens</text>
 </svg>

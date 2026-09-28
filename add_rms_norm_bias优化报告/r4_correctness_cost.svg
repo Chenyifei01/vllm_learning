@@ -1,11 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="780" height="330" viewBox="0 0 780 330" role="img" aria-label="检视修复轮：正确性的性能代价与累计收益（bf16，µs）">
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="390" viewBox="0 0 780 390" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+  <title id="title">检视修复的正确性代价与累计收益</title>
+  <desc id="desc">bf16 时延对比。检视修复略微增加耗时，但 2048 和 4096 token 相比基线仍分别累计提升 24.8% 和 26.8%。</desc>
   <style>
     .surf { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .mut { fill: #898781; }
     .grid { stroke: #e1e0d9; stroke-width: 1; } .bline { stroke: #c3c2b7; stroke-width: 1; }
     .s1 { fill: #2a78d6; stroke: #2a78d6; } .s2 { fill: #eb6834; stroke: #eb6834; } .s3 { fill: #1baf7a; stroke: #1baf7a; }
     .s4 { fill: #eda100; stroke: #eda100; } .s5 { fill: #e87ba4; stroke: #e87ba4; }
     .neg { fill: #e34948; stroke: #e34948; }
-    text { font-family: system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif; }
+    text { font-family: 'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Segoe UI',Arial,sans-serif; }
     @media (prefers-color-scheme: dark) {
       .surf { fill: #1a1a19; } .ink { fill: #ffffff; } .ink2 { fill: #c3c2b7; } .mut { fill: #898781; }
       .grid { stroke: #2c2c2a; } .bline { stroke: #383835; }
@@ -14,10 +16,11 @@
       .neg { fill: #e66767; stroke: #e66767; }
     }
   </style>
-<rect class="surf" x="0" y="0" width="780" height="330"/>
+<rect class="surf" x="0" y="0" width="780" height="390"/>
 <text class="ink" x="24" y="30" font-size="15" font-weight="600">检视修复轮：正确性的性能代价与累计收益（bf16，µs）</text>
 
 <text class="ink2" x="24" y="48" font-size="12" text-anchor="start">NPUGraph，hidden=7168；回退 1/N 折叠恢复溢出语义后 @2048 +4.5%，累计仍 -24.8%</text>
+<g transform="translate(0 30)">
 <line class="grid" x1="56" y1="245" x2="760" y2="245"/>
 <line class="grid" x1="56" y1="202" x2="760" y2="202"/>
 <line class="grid" x1="56" y1="160" x2="760" y2="160"/>
@@ -31,24 +34,26 @@
 <text class="mut" x="48" y="79.03703703703704" font-size="11" text-anchor="end">250</text>
 <path class="s1" d="M194,288 L194,190 Q194,186 198,186 L214,186 Q218,186 218,190 L218,288 Z"/>
 <text class="ink2" x="206.0" y="180.28037037037038" font-size="11" text-anchor="middle">119.4</text>
-<path class="s1" d="M220,288 L220,218 Q220,214 224,214 L240,214 Q244,214 244,218 L244,288 Z"/>
+<path class="s2" d="M220,288 L220,218 Q220,214 224,214 L240,214 Q244,214 244,218 L244,288 Z"/>
 <text class="ink2" x="232.0" y="208.8003703703704" font-size="11" text-anchor="middle">85.9</text>
-<path class="s1" d="M246,288 L246,215 Q246,211 250,211 L266,211 Q270,211 270,215 L270,288 Z"/>
+<path class="s3" d="M246,288 L246,215 Q246,211 250,211 L266,211 Q270,211 270,215 L270,288 Z"/>
 <text class="ink2" x="258.0" y="205.4951851851852" font-size="11" text-anchor="middle">89.8</text>
 <text class="mut" x="232.0" y="304" font-size="11" text-anchor="middle">tokens=2048</text>
 <path class="s1" d="M546,288 L546,78 Q546,74 550,74 L566,74 Q570,74 570,78 L570,288 Z"/>
 <text class="ink2" x="558.0" y="68.2788888888889" font-size="11" text-anchor="middle">250.9</text>
-<path class="s1" d="M572,288 L572,138 Q572,134 576,134 L592,134 Q596,134 596,138 L596,288 Z"/>
+<path class="s2" d="M572,288 L572,138 Q572,134 576,134 L592,134 Q596,134 596,138 L596,288 Z"/>
 <text class="ink2" x="584.0" y="128.4451851851852" font-size="11" text-anchor="middle">180.3</text>
-<path class="s1" d="M598,288 L598,135 Q598,131 602,131 L618,131 Q622,131 622,135 L622,288 Z"/>
-<text class="ink2" x="610.0" y="125.5574074074074" font-size="11" text-anchor="middle">183.7</text>
+<path class="s3" d="M598,288 L598,135 Q598,131 602,131 L618,131 Q622,131 622,135 L622,288 Z"/>
+<text class="ink2" x="610.0" y="112" font-size="11" text-anchor="middle">183.7</text>
 <text class="mut" x="584.0" y="304" font-size="11" text-anchor="middle">tokens=4096</text>
 <text class="ink2" x="232.0" y="164.28037037037038" font-size="11" text-anchor="middle">-24.8% vs 基线</text>
 <text class="mut" x="246.0" y="192.8003703703704" font-size="10" text-anchor="start">← +4.5% 正确性代价</text>
-<rect class="s1" x="56" y="24" width="12" height="12" rx="2"/>
-<text class="ink2" x="74" y="34" font-size="12" text-anchor="start">基线</text>
-<rect class="s1" x="118" y="24" width="12" height="12" rx="2"/>
-<text class="ink2" x="136" y="34" font-size="12" text-anchor="start">检视修复前</text>
-<rect class="s1" x="219" y="24" width="12" height="12" rx="2"/>
-<text class="ink2" x="237" y="34" font-size="12" text-anchor="start">检视修复后</text>
+</g>
+<rect class="s1" x="56" y="62" width="12" height="12" rx="2"/>
+<text class="ink2" x="74" y="72" font-size="12" text-anchor="start">基线</text>
+<rect class="s2" x="118" y="62" width="12" height="12" rx="2"/>
+<text class="ink2" x="136" y="72" font-size="12" text-anchor="start">检视修复前</text>
+<rect class="s3" x="219" y="62" width="12" height="12" rx="2"/>
+<text class="ink2" x="237" y="72" font-size="12" text-anchor="start">检视修复后</text>
+<text class="mut" x="18" y="212" font-size="11" text-anchor="middle" transform="rotate(-90 18 212)">时延（µs）</text>
 </svg>
