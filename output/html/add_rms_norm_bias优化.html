@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="add_rms_norm_bias 在 Ascend 910B3 上的性能优化报告">
+  <title>add_rms_norm_bias 融合算子 Ascend 性能优化报告</title>
+  <style>
+    :root { color-scheme: light; --ink: #17212d; --muted: #596675; --accent: #ca5429; --line: #dce2e8; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: #f4f6f8; color: var(--ink); font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif; font-size: 14px; line-height: 1.85; }
+    .layout { max-width: 1360px; margin: 36px auto; padding: 0 28px; display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 30px; }
+    nav { align-self: start; position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow: auto; padding: 15px 0; }
+    nav strong { display: block; margin-bottom: 12px; color: var(--accent); font-size: 12px; letter-spacing: .12em; }
+    nav a { display: block; padding: 5px 0; color: var(--muted); text-decoration: none; font-size: 12px; line-height: 1.6; }
+    nav a:hover { color: var(--accent); }
+    nav .depth-3 { padding-left: 12px; font-size: 11px; }
+    main { min-width: 0; padding: 42px 46px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 5px 22px #22334808; }
+    h1 { margin: 0 0 26px; padding-bottom: 20px; border-bottom: 3px solid var(--accent); font-size: 27px; line-height: 1.5; font-weight: 700; }
+    h2 { margin: 34px 0 16px; font-size: 21px; border-left: 4px solid var(--accent); padding-left: 12px; line-height: 1.5; }
+    h3 { margin: 25px 0 12px; font-size: 17px; line-height: 1.6; }
+    h4 { margin: 20px 0 8px; font-size: 14px; }
+    p { margin: 10px 0 14px; }
+    strong { font-weight: 700; }
+    code { font-family: Consolas, "Microsoft YaHei", monospace; font-size: .91em; padding: .07em .25em; background: #f0f3f6; border-radius: 3px; overflow-wrap: anywhere; }
+    pre { padding: 16px 18px; margin: 16px 0; border: 1px solid var(--line); border-left: 3px solid #aab7c4; border-radius: 4px; background: #f6f8fa; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.7; tab-size: 4; }
+    pre code { padding: 0; background: none; font-size: inherit; border-radius: 0; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 15px 0 19px; font-size: 12px; line-height: 1.7; }
+    th, td { border: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    th { background: #edf2f6; color: #24384c; font-weight: 700; }
+    tbody tr:nth-child(even) { background: #fafbfd; }
+    table code { background: none; padding: 0; font-size: .94em; }
+    figure { margin: 24px 0; padding: 12px 12px 8px; border: 1px solid var(--line); border-radius: 5px; background: #fff; }
+    figure img { display: block; width: 100%; height: auto; }
+    figcaption { margin-top: 8px; color: var(--muted); text-align: center; font-size: 11px; line-height: 1.5; }
+    hr { margin: 30px 0; height: 1px; border: 0; background: var(--line); }
+    ol, ul { padding-left: 1.7em; margin: 12px 0; }
+    li { margin: 8px 0; }
+    a { color: #266da1; }
+    @media (max-width: 1000px) { .layout { display: block; padding: 0 18px; margin: 18px auto; } nav { display: none; } main { padding: 28px; } }
+    @media (max-width: 600px) { .layout { padding: 0; margin: 0; } main { padding: 22px 14px; border-radius: 0; } h1 { font-size: 22px; } table { font-size: 10px; } th, td { padding: 5px; } }
+    @page { size: A4; }
+    @media print {
+      html { scroll-behavior: auto; }
+      body { background: #fff; font-size: 9.6pt; line-height: 1.7; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .layout { display: block; padding: 0; margin: 0; max-width: none; }
+      nav { display: none; }
+      main { padding: 0; border: 0; border-radius: 0; box-shadow: none; }
+      h1 { font-size: 19pt; margin-bottom: 16pt; padding-bottom: 12pt; }
+      h2 { font-size: 14pt; margin: 20pt 0 10pt; padding-left: 8pt; }
+      h3 { font-size: 11.8pt; margin: 15pt 0 8pt; }
+      h4 { font-size: 10pt; margin: 11pt 0 5pt; }
+      h1, h2, h3, h4 { break-after: avoid; }
+      p { margin: 6pt 0 9pt; orphans: 3; widows: 3; }
+      table { font-size: 8pt; line-height: 1.55; margin: 9pt 0 12pt; break-inside: avoid; }
+      th, td { padding: 4pt 6pt; }
+      .lead-in { break-after: avoid; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; }
+      pre { font-size: 7.5pt; line-height: 1.65; padding: 9pt 10pt; margin: 10pt 0; break-inside: avoid; }
+      figure { padding: 5pt 5pt 4pt; margin: 13pt 0; break-inside: avoid; }
+      figcaption { font-size: 8pt; margin-top: 5pt; }
+      hr { margin: 16pt 0; }
+      li { margin: 5pt 0; orphans: 3; widows: 3; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav aria-label="目录"><strong>报告目录</strong><a class="depth-2" href="#section-2">1. 背景</a>
+<a class="depth-3" href="#section-3">测试环境</a>
+<a class="depth-3" href="#section-4">算子功能</a>
+<a class="depth-3" href="#section-5">结论摘要</a>
+<a class="depth-2" href="#section-6">2. 算子在大模型中的位置与数据</a>
+<a class="depth-3" href="#section-7">2.1 位置</a>
+<a class="depth-3" href="#section-8">2.2 变体分发——本算子的第一课：先确认优化对象</a>
+<a class="depth-3" href="#section-9">2.3 输入输出与片上数据流</a>
+<a class="depth-2" href="#section-10">3. 优化总览</a>
+<a class="depth-2" href="#section-11">4. 逐轮优化过程</a>
+<a class="depth-3" href="#section-12">4.1 初始版本：每行全串行，双瓶颈叠加</a>
+<a class="depth-3" href="#section-13">4.2 第一轮：消标量往返与冗余 pass</a>
+<a class="depth-3" href="#section-17">4.3 第二轮：行间流水（收益最大的一轮）</a>
+<a class="depth-3" href="#section-21">4.4 第三轮：广度轮——序言重叠与旁支变体</a>
+<a class="depth-3" href="#section-22">4.5 检视修复轮：补齐正确性与边界验证</a>
+<a class="depth-3" href="#section-23">4.6 负结果：Reduce 依赖链重构未取得显著收益</a>
+<a class="depth-3" href="#section-24">4.7 总收益与最终状态</a>
+<a class="depth-2" href="#section-25">5. 归因速查表与关键经验</a>
+<a class="depth-3" href="#section-26">5.1 归因速查表</a>
+<a class="depth-3" href="#section-27">5.2 关键经验</a></nav>
+    <main><h1 id="section-1">add_rms_norm_bias 融合算子 Ascend 性能优化报告</h1>
+<h2 id="section-2">1. 背景</h2>
+<p>RMSNorm 是 Transformer 每层 decoder 的必经算子；带残差连接的推理引擎里，归一化前还要先把 attention/FFN 的输出与 residual 相加。把「残差相加 → RMSNorm → bias」融为一个 kernel，可以把中间 x 的往返读写省掉，并将三次 launch 合为一次。vLLM Ascend 插件据此实现了自研算子 <strong><code>add_rms_norm_bias</code></strong>：一次调用产出三份输出（归一化结果 y、统计量 rstd、相加后的残差 x），由 <code>AscendRMSNorm.forward_oot</code> 在 decoder 层调用，覆盖 prefill 与 decode 场景。</p>
+<p>本文总结 <code>add_rms_norm_bias</code> 在 Ascend 910B3 上的性能优化过程，重点分析 bf16 NORMAL 生产主路径的发射线程停等、冗余向量遍历与行间串行问题。优化包括 rstd 全程向量计算、γ/β 类型转换上提及双缓冲行间流水，并扩展到 fp16 与 decode 路径。报告给出基线画像、逐轮性能结果、正确性修复及最终适用范围，同时记录 reduce 依赖链重构未取得显著收益的实验，区分设备观测与待验证的机理解释。</p>
+<h3 id="section-3">测试环境</h3>
+<table><colgroup><col style="width:21%"><col style="width:79%"></colgroup>
+<thead>
+<tr>
+<th>项目</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>设备</td>
+<td>Ascend 910B3（dav_c220 向量核），40 AIV，UB 192KiB/核</td>
+</tr>
+<tr>
+<td>CANN</td>
+<td>9.1.0</td>
+</tr>
+<tr>
+<td>模型场景</td>
+<td>DeepSeek 类 hidden=7168，bf16 主 / fp16 对照</td>
+</tr>
+<tr>
+<td>测试矩阵</td>
+<td>tokens = 1/4/16/64/128/512/1024/2048/4096 × bf16/fp16</td>
+</tr>
+<tr>
+<td>计时口径</td>
+<td>NPUGraph capture+replay（≈背靠背 serving，5 样本取中位）；msprof op 做管线归因</td>
+</tr>
+</tbody></table>
+<h3 id="section-4">算子功能</h3>
+<pre><code class="language-text">x     = bf16(fp32(x1) + fp32(x2))                 # 残差相加（c220 无 bf16 元级加法，须在 fp32 域）
+rstd  = 1/sqrt(mean(x²) + eps)                    # fp32
+y     = bf16( fp32(bf16(x_norm)) × fp32(γ) + fp32(β) )   # 双舍入契约
+返回 (y, rstd, x) 三份输出
+</code></pre>
+<h3 id="section-5">结论摘要</h3>
+<table><colgroup><col style="width:21%"><col style="width:79%"></colgroup>
+<thead>
+<tr>
+<th>项目</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>生产主路径</td>
+<td>bf16、hidden=7168、rows≥41 → tiling key 30（NORMAL 变体）；decode（rows≤40）→ SINGLE_N</td>
+</tr>
+<tr>
+<td>基线瓶颈</td>
+<td>发射线程停等（scalar_wait 占墙钟 85%）+ 行间零流水 + 15 遍全宽 pass 中 3 遍冗余</td>
+</tr>
+<tr>
+<td>核心方案</td>
+<td>消 V_S/S_V 往返（rstd 全程 V 域）、双缓冲行间流水、γ/β cast 上提每核</td>
+</tr>
+<tr>
+<td>最终收益</td>
+<td>bf16 @2048 -24.8%（119.4→89.8µs）、@4096 -26.8%；fp16 @2048 -4.1%</td>
+</tr>
+<tr>
+<td>最终状态</td>
+<td>有效带宽约 1.31TB/s（名义峰值 ~1.6TB/s 的 82%），接近带宽/向量流水转折区</td>
+</tr>
+<tr>
+<td>正确性</td>
+<td>精度测试通过（原 126 用例 + 新增 154 用例）</td>
+</tr>
+<tr>
+<td>已回退方案</td>
+<td>Reduce 多链交错重构：收益噪声级且存在 dst==src1 交错 fault 风险（见 §4.6）</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="section-6">2. 算子在大模型中的位置与数据</h2>
+<h3 id="section-7">2.1 位置</h3>
+<pre><code class="language-text">token embeddings
+  → N × decoder layer（每层两次归一化，带残差时都走本算子）
+       attention/FFN 输出 x1 + residual x2 → RMSNorm → bias → y
+  → logits
+
+调用方：AscendRMSNorm.forward_oot；prefill（大 tokens）与 decode（1~4 tokens）都命中
+</code></pre>
+<h3 id="section-8">2.2 变体分发——本算子的第一课：先确认优化对象</h3>
+<p class="lead-in">算子按 <code>(dtype_key×10 + mode_key)</code> 分发 5 个变体（NORMAL/SPLIT_D/MERGE_N/SINGLE_N/MULTI_N）。任务简报认定「hidden=7168 走 SPLIT_D」，但静态读 tiling 推出的是另一回事，最终以设备日志实证（<code>ASCEND_GLOBAL_LOG_LEVEL=1</code> 采集 tiling 输出）：</p>
+<table><colgroup><col style="width:35%"><col style="width:12%"><col style="width:18%"><col style="width:35%"></colgroup>
+<thead>
+<tr>
+<th>基线生产 shape（hidden=7168）</th>
+<th>tiling key</th>
+<th>变体</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>bf16, rows ≤ 40</td>
+<td>33</td>
+<td>SINGLE_N</td>
+<td>decode 档</td>
+</tr>
+<tr>
+<td><strong>bf16, rows ≥ 41</strong></td>
+<td><strong>30</strong></td>
+<td><strong>NORMAL</strong></td>
+<td><strong>生产 prefill 主路径</strong></td>
+</tr>
+<tr>
+<td>fp16, rows ≤ 40</td>
+<td>13</td>
+<td>SINGLE_N</td>
+<td></td>
+</tr>
+<tr>
+<td>fp16, rows ≥ 41</td>
+<td>14</td>
+<td>MULTI_N</td>
+<td>fp16 prefill，基线已采用双缓冲</td>
+</tr>
+</tbody></table>
+<p>基线 SPLIT_D 的触发条件是 <code>numCol &gt; ubFactor</code>（有 β 时 bf16 上限 11264 列），生产 hidden=7168 未命中该路径。最终版本还对 NORMAL 候选路径增加 UB 成本检查，超限时回退 SPLIT_D（见 §4.5）；7168 仍走上述生产路径。<strong>如果按简报直接优化 SPLIT_D，生产 shape 上的工作量会落在零收益的路径上。</strong> 教训：分发条件要用实测 tiling 日志钉死，不要信文档/口口相传。</p>
+<h3 id="section-9">2.3 输入输出与片上数据流</h3>
+<table><colgroup><col style="width:20%"><col style="width:25%"><col style="width:15%"><col style="width:40%"></colgroup>
+<thead>
+<tr>
+<th>张量</th>
+<th>形状</th>
+<th>类型</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>x1 / x2</td>
+<td><code>[tokens, 7168]</code></td>
+<td>bf16</td>
+<td>输入与残差</td>
+</tr>
+<tr>
+<td>γ / β</td>
+<td><code>[7168]</code></td>
+<td>bf16</td>
+<td>每核只载一次</td>
+</tr>
+<tr>
+<td>y / x</td>
+<td><code>[tokens, 7168]</code></td>
+<td>bf16</td>
+<td>输出</td>
+</tr>
+<tr>
+<td>rstd</td>
+<td><code>[tokens, 1]</code></td>
+<td>fp32</td>
+<td>统计量输出</td>
+</tr>
+</tbody></table>
+<p>原始实现（NORMAL 变体）<strong>每行全串行</strong>：单缓冲队列使下一行的 MTE2 装载必须等上一行的 V 消费完；每行末尾一次 <code>V_S→GetValue→S_V</code> 标量往返把发射线程钉在行尾。bf16 的 y 链在 fp32 域做数学（c220 无 bf16 元级乘加），每行 <strong>15 遍全宽 pass</strong>——其中 3 遍冗余（γ/β 的 cast 每行重做、1/N 在 reduce 前全宽乘）。</p>
+<p class="lead-in">优化后的片上数据流（R2 流水化后）：</p>
+<pre><code class="language-text">每行 i（槽位 s = i&amp;1）：
+  MTE2: x1[i+1]/x2[i+1] 预取进另一槽     ← 与本行 V 链重叠
+  V:    cast x1/x2 → add → rint = x_out（落 x1[s]）
+        mul 平方 → reduce → 标量链(1 elem) → rstd 留在 V 域
+        Gather 广播 rstd → mul → rint = y-mid → widen → ×γ → +β → rint = y（落 x2[s]）
+  MTE3: x_out 与 y 落盘                  ← 与下一行 V 链重叠
+  rstd: 1 elem Adds 进 8-lane 累积块 → 块末 Gather 压缩 → 一次 DataCopyPad 落 GM
+</code></pre>
+<p>消除每行 <code>V_S/S_V</code> 往返，将依赖等待放到消费 pipe；发射线程的 scalar_wait 显著降低，并非所有等待都归零。</p>
+<hr>
+<h2 id="section-10">3. 优化总览</h2>
+<table><colgroup><col style="width:14%"><col style="width:39%"><col style="width:29%"><col style="width:18%"></colgroup>
+<thead>
+<tr>
+<th>轮次</th>
+<th>手段</th>
+<th>针对的问题</th>
+<th>分析依据</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>第一轮·减法</td>
+<td>消 V_S/S_V 标量往返；γ/β cast 上提每核；1/N 折叠进标量；tiling ubFactor 11264→7168</td>
+<td>15 遍全宽 pass 中 3 遍冗余 + 发射线程停等</td>
+<td>代码走读 + msprof</td>
+</tr>
+<tr>
+<td>第二轮·流水</td>
+<td>x[2]/x2[2] 双缓冲（局部行号奇偶）、事件四件套三方向单在途、rstd 全程 V 域</td>
+<td>行间零流水（单缓冲串行）、scalar_wait 85%</td>
+<td>缓冲与事件依赖分析 + msprof</td>
+</tr>
+<tr>
+<td>第三轮·广度</td>
+<td>NORMAL 序言重叠；MULTI_N 折叠 1/N；SINGLE_N 消往返</td>
+<td>64-128 档序言占比、fp16/decode 路径</td>
+<td>各变体代码走读 + 性能对照</td>
+</tr>
+<tr>
+<td>检视修复</td>
+<td>外部检视 7 条全修（UB 成本模型、rstd 压缩、溢出域、host 校验）+ 新增精度测试</td>
+<td>正确性（原有测试未检出的行混叠/越界）</td>
+<td>外部检视 + 设备复现</td>
+</tr>
+<tr>
+<td>负结果</td>
+<td>Reduce 依赖链重构（8 链交错）</td>
+<td>假设的 reduce 延迟链</td>
+<td>当前配置下收益为噪声级</td>
+</tr>
+</tbody></table>
+<p><strong>经验法则</strong>：先实证 tiling 命中的变体（优化错变体 = 零收益）→ 核对数值契约，再消标量往返与冗余 pass → 行间流水（本例收益最大，需明确槽位复用与事件生命周期）→ 用未动路径与独立复测估计噪声 → 结合 HBM 理想下限与向量占用校准后续预期。</p>
+<hr>
+<h2 id="section-11">4. 逐轮优化过程</h2>
+<h3 id="section-12">4.1 初始版本：每行全串行，双瓶颈叠加</h3>
+<p class="lead-in"><strong>瓶颈判定</strong>（msprof op，2048×7168 bf16，40 核均值，墙钟 124.4µs）：</p>
+<table><colgroup><col style="width:18%"><col style="width:19%"><col style="width:16%"><col style="width:47%"></colgroup>
+<thead>
+<tr>
+<th>指标</th>
+<th align="right">值</th>
+<th align="right">占墙钟</th>
+<th>判读</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>vec busy</td>
+<td align="right">87.9µs</td>
+<td align="right">70.7%</td>
+<td>最大占用者但未饱和（1.69µs/行 ÷ 15 pass ≈ 0.11µs/pass）</td>
+</tr>
+<tr>
+<td>mte2 / mte3 busy</td>
+<td align="right">27.0 / 18.7µs</td>
+<td align="right">21.7% / 15.0%</td>
+<td>未与 V 充分重叠</td>
+</tr>
+<tr>
+<td><strong>scalar_wait</strong></td>
+<td align="right"><strong>106.0µs</strong></td>
+<td align="right"><strong>85.2%</strong></td>
+<td>发射线程几乎全程停等</td>
+</tr>
+</tbody></table>
+<p>两个信号拼出双瓶颈结构：V 是最大占用者，但其 busy 时间与任务墙钟仍有约 29.3% 的差距；scalar_wait 85.2% 说明发射线程被每行的标量往返与单缓冲队列的串行点钉住——它停着，装载/落盘的重叠就难以展开。CSV 中 <code>aiv_vec_ratio</code> 的 40 核均值为 73.1%，分母是各核 AIV 活跃时间，不是任务墙钟，不能与表中占比混用。注意口径：<strong>各 pipe 的 busy/wait 统计在时间上可能重叠，不是互斥占比，不能相加得到 100%</strong>。</p>
+<p class="lead-in"><strong>代码走读量化清单</strong>（bf16 每行，按类别计数）：</p>
+<table><colgroup><col style="width:15%"><col style="width:12%"><col style="width:12%"><col style="width:12%"><col style="width:49%"></colgroup>
+<thead>
+<tr>
+<th>类别</th>
+<th align="right">基线</th>
+<th align="right">第一轮后</th>
+<th>变化</th>
+<th>明细</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>全宽向量 pass（≥64 lane 宽度）</td>
+<td align="right">15</td>
+<td align="right">12</td>
+<td><strong>-3</strong></td>
+<td>cast x1、cast x2、add、rint=x 输出、mul 平方、<strong>muls ×1/N（折叠）</strong>、reduce 树、muls ×rstd、rint y-mid、重新 widen、<strong>cast γ（上提）</strong>、mul γ、<strong>cast β（上提）</strong>、add β、rint y 输出</td>
+</tr>
+<tr>
+<td>单元素向量/标量操作</td>
+<td align="right">~6</td>
+<td align="right">~6</td>
+<td>不变</td>
+<td>Adds(eps)/Sqrt/Duplicate(ONE)/Div + rstd 累积</td>
+</tr>
+<tr>
+<td>V/S 跨流水同步</td>
+<td align="right">2 次/行</td>
+<td align="right">0</td>
+<td><strong>-2 次/行</strong></td>
+<td>V_S→GetValue→S_V→SetValue 整链消除（rstd 留在 V 域）</td>
+</tr>
+<tr>
+<td>GM 读写量/行</td>
+<td align="right">4 份全宽张量 + rstd</td>
+<td align="right">4 份全宽张量 + rstd</td>
+<td>不变</td>
+<td>读 x1/x2，写 x/y；rstd 为每行 1 个 fp32 值、每 64 行批量落盘</td>
+</tr>
+</tbody></table>
+<p>（&quot;15 遍全宽&quot;只计全宽向量遍历，不含单元素操作与同步步骤；15→12 为第一轮状态，最终 bf16/fp32 已恢复 reduce 前的全宽 1/N 缩放，见 §4.5。）</p>
+<h3 id="section-13">4.2 第一轮：消标量往返与冗余 pass</h3>
+<h4 id="section-14">问题分析</h4>
+<p>三处冗余 + 一处停等：γ/β 每核只载一次却每行 cast；1/N 在 reduce 前全宽乘；rstd 经 V_S/GetValue/S_V/SetValue 绕行标量域。每行 15 遍全宽 → 12 遍，且消掉每行 2 次跨 pipe 同步。</p>
+<h4 id="section-15">关键变化</h4>
+<pre><code class="language-cpp">// ① rstd 广播留在向量域（位级一致）：Gather 复制 sqx[0] 成 8-lane 块，
+//    stride-0 块广播 Mul 替代标量操作数的 Muls——rstd 不再走 S pipe
+__aicore__ inline void MulByRstd(dst, src, sqx, count) {
+    Gather(rstd8, sqx, zeroOff8, 0, 8);
+    PipeBarrier&lt;PIPE_V&gt;();
+    Mul(dst, src, rstd8, 64, repeatTimes, {1, 1, 0, 8, 8, 0});   // src1RepStride=0
+    ...   // 尾块同参
+}
+
+// ② γ/β 每核 widen 一次进常驻缓冲（+57.4KB，靠 tiling 收紧腾出）
+// ③ 1/N 折叠：reduce 前全宽 Muls → reduce 后 1 元素 Muls
+// ④ tiling：NORMAL 模式 ubFactor 11264 → numColAlign（原常量是 16B/列×11264
+//    =180KB 的全宽安全设计；收紧后缓冲随 numCol 比例，为 cast 常驻腾 76KB）
+</code></pre>
+<h4 id="section-16">结果</h4>
+<p>NPUGraph：@2048 119.4→109.3µs（<strong>-8.4%</strong>），@512-4096 -7~8%；msprof wall 124.4→114.7µs、vec busy 87.9→77.8µs，mte2/mte3 不变——「纯减 vec 工作」的定位被数据确认。未动代码的 fp16 路径同轮波动 ±1µs → 该档噪声带，<strong>收益判定以 ≥512 档为准</strong>。</p>
+<figure id="figure-1"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4NjAiIGhlaWdodD0iMzUwIiB2aWV3Qm94PSIwIDAgODYwIDM1MCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPg0KICA8dGl0bGUgaWQ9InRpdGxlIj7nrKzkuIDova7lkITmoaPkvY3mj5DljYfnjoc8L3RpdGxlPg0KICA8ZGVzYyBpZD0iZGVzYyI+YmYxNu+8jGhpZGRlbiDnrYnkuo4gNzE2OOOAguWwjyB0b2tlbiDmoaPnlaXmnInlm57pgIDvvIw1MTIg6IezIDQwOTYgdG9rZW4g5o+Q5Y2H57qmIDclIOiHsyA4LjQl44CCPC9kZXNjPg0KICA8c3R5bGU+DQogICAgLnN1cmYgeyBmaWxsOiAjZmNmY2ZiOyB9IC5pbmsgeyBmaWxsOiAjMGIwYjBiOyB9IC5pbmsyIHsgZmlsbDogIzUyNTE0ZTsgfSAubXV0IHsgZmlsbDogIzg5ODc4MTsgfQ0KICAgIC5ncmlkIHsgc3Ryb2tlOiAjZTFlMGQ5OyBzdHJva2Utd2lkdGg6IDE7IH0gLmJsaW5lIHsgc3Ryb2tlOiAjYzNjMmI3OyBzdHJva2Utd2lkdGg6IDE7IH0NCiAgICAuczEgeyBmaWxsOiAjMmE3OGQ2OyBzdHJva2U6ICMyYTc4ZDY7IH0gLnMyIHsgZmlsbDogI2ViNjgzNDsgc3Ryb2tlOiAjZWI2ODM0OyB9IC5zMyB7IGZpbGw6ICMxYmFmN2E7IHN0cm9rZTogIzFiYWY3YTsgfQ0KICAgIC5zNCB7IGZpbGw6ICNlZGExMDA7IHN0cm9rZTogI2VkYTEwMDsgfSAuczUgeyBmaWxsOiAjZTg3YmE0OyBzdHJva2U6ICNlODdiYTQ7IH0NCiAgICAubmVnIHsgZmlsbDogI2UzNDk0ODsgc3Ryb2tlOiAjZTM0OTQ4OyB9DQogICAgdGV4dCB7IGZvbnQtZmFtaWx5OiAnTWljcm9zb2Z0IFlhSGVpJywnUGluZ0ZhbmcgU0MnLCdOb3RvIFNhbnMgQ0pLIFNDJywnU2Vnb2UgVUknLEFyaWFsLHNhbnMtc2VyaWY7IH0NCiAgICBAbWVkaWEgKHByZWZlcnMtY29sb3Itc2NoZW1lOiBkYXJrKSB7DQogICAgICAuc3VyZiB7IGZpbGw6ICMxYTFhMTk7IH0gLmluayB7IGZpbGw6ICNmZmZmZmY7IH0gLmluazIgeyBmaWxsOiAjYzNjMmI3OyB9IC5tdXQgeyBmaWxsOiAjODk4NzgxOyB9DQogICAgICAuZ3JpZCB7IHN0cm9rZTogIzJjMmMyYTsgfSAuYmxpbmUgeyBzdHJva2U6ICMzODM4MzU7IH0NCiAgICAgIC5zMSB7IGZpbGw6ICMzOTg3ZTU7IHN0cm9rZTogIzM5ODdlNTsgfSAuczIgeyBmaWxsOiAjZDk1OTI2OyBzdHJva2U6ICNkOTU5MjY7IH0gLnMzIHsgZmlsbDogIzE5OWU3MDsgc3Ryb2tlOiAjMTk5ZTcwOyB9DQogICAgICAuczQgeyBmaWxsOiAjYzk4NTAwOyBzdHJva2U6ICNjOTg1MDA7IH0gLnM1IHsgZmlsbDogI2Q1NTE4MTsgc3Ryb2tlOiAjZDU1MTgxOyB9DQogICAgICAubmVnIHsgZmlsbDogI2U2Njc2Nzsgc3Ryb2tlOiAjZTY2NzY3OyB9DQogICAgfQ0KICA8L3N0eWxlPg0KPHJlY3QgY2xhc3M9InN1cmYiIHg9IjAiIHk9IjAiIHdpZHRoPSI4NjAiIGhlaWdodD0iMzUwIi8+DQo8dGV4dCBjbGFzcz0iaW5rIiB4PSIyNCIgeT0iMzAiIGZvbnQtc2l6ZT0iMTUiIGZvbnQtd2VpZ2h0PSI2MDAiPuesrOS4gOi9ruWQhOaho+S9jeaPkOWNh+eOh++8iGJmMTbvvIzln7rnur8g4oaSIOesrOS4gOi9ru+8m+ato+S4uuabtOW/q++8iTwvdGV4dD4NCg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjI0IiB5PSI0OCIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9InN0YXJ0Ij5OUFVHcmFwaO+8jGhpZGRlbj03MTY477yb5o+Q5Y2H546HID0gKOWfuue6vyDiiJIg5LyY5YyW5ZCOKS/ln7rnur88L3RleHQ+DQo8bGluZSBjbGFzcz0iZ3JpZCIgeDE9IjU2IiB5MT0iMTM0IiB4Mj0iODQwIiB5Mj0iMTM0Ii8+DQo8bGluZSBjbGFzcz0iZ3JpZCIgeDE9IjU2IiB5MT0iMjg4IiB4Mj0iODQwIiB5Mj0iMjg4Ii8+DQo8bGluZSBjbGFzcz0iYmxpbmUiIHgxPSI1NiIgeTE9IjIxMSIgeDI9Ijg0MCIgeTI9IjIxMSIvPg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNDgiIHk9IjEzOC42NjY2NjY2NjY2NjY2NiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+KzUlPC90ZXh0Pg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNDgiIHk9IjI5Mi4wIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0iZW5kIj4tNSU8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSI0OCIgeT0iMjE1LjMzMzMzMzMzMzMzMzMxIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0iZW5kIj4wJTwvdGV4dD4NCjxwYXRoIGNsYXNzPSJuZWciIGQ9Ik04NywyMTEgTDg3LDI2MSBROTEsMjYxIDExMSwyNjEgTDExMSwyMDcgUTExMSwyMTEgMTA3LDIxMSBMODcsMjExIFoiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSI5OS41NTU1NTU1NTU1NTU1NiIgeT0iMjc1LjkzMzMzMzMzMzMzMzM0IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4tMy4zJTwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9Ijk5LjU1NTU1NTU1NTU1NTU2IiB5PSIzMDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjE8L3RleHQ+DQo8cGF0aCBjbGFzcz0ibmVnIiBkPSJNMTc0LDIxMSBMMTc0LDI0NSBRMTc4LDI0NSAxOTgsMjQ1IEwxOTgsMjA3IFExOTgsMjExIDE5NCwyMTEgTDE3NCwyMTEgWiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjE4Ni42NjY2NjY2NjY2NjY2OSIgeT0iMjU5LjA2NjY2NjY2NjY2NjYiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPi0yLjIlPC90ZXh0Pg0KPHRleHQgY2xhc3M9Im11dCIgeD0iMTg2LjY2NjY2NjY2NjY2NjY5IiB5PSIzMDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjQ8L3RleHQ+DQo8cGF0aCBjbGFzcz0ibmVnIiBkPSJNMjYxLDIxMSBMMjYxLDIxNyBRMjY1LDIxNyAyODUsMjE3IEwyODUsMjA3IFEyODUsMjExIDI4MSwyMTEgTDI2MSwyMTEgWiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjI3My43Nzc3Nzc3Nzc3Nzc3NyIgeT0iMjMxLjQ2NjY2NjY2NjY2NjY3IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4tMC40JTwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjI3My43Nzc3Nzc3Nzc3Nzc3NyIgeT0iMzA0IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xNjwvdGV4dD4NCjxwYXRoIGNsYXNzPSJzMSIgZD0iTTM0OCwyMTEgTDM0OCwxNTggUTM0OCwxNTQgMzUyLDE1NCBMMzY4LDE1NCBRMzcyLDE1NCAzNzIsMTU4IEwzNzIsMjExIFoiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSIzNjAuODg4ODg4ODg4ODg4OSIgeT0iMTQ4LjYiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPiszLjclPC90ZXh0Pg0KPHRleHQgY2xhc3M9Im11dCIgeD0iMzYwLjg4ODg4ODg4ODg4ODkiIHk9IjMwNCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NjQ8L3RleHQ+DQo8cGF0aCBjbGFzcz0iczEiIGQ9Ik00MzYsMjExIEw0MzYsMTU1IFE0MzYsMTUxIDQ0MCwxNTEgTDQ1NiwxNTEgUTQ2MCwxNTEgNDYwLDE1NSBMNDYwLDIxMSBaIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iNDQ4LjAiIHk9IjE0NS41MzMzMzMzMzMzMzMzIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4rMy45JTwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjQ0OC4wIiB5PSIzMDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjEyODwvdGV4dD4NCjxwYXRoIGNsYXNzPSJzMSIgZD0iTTUyMywyMTEgTDUyMywxMDggUTUyMywxMDQgNTI3LDEwNCBMNTQzLDEwNCBRNTQ3LDEwNCA1NDcsMTA4IEw1NDcsMjExIFoiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSI1MzUuMTExMTExMTExMTExMSIgeT0iOTguMCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+KzcuMCU8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSI1MzUuMTExMTExMTExMTExMSIgeT0iMzA0IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj41MTI8L3RleHQ+DQo8cGF0aCBjbGFzcz0iczEiIGQ9Ik02MTAsMjExIEw2MTAsODkgUTYxMCw4NSA2MTQsODUgTDYzMCw4NSBRNjM0LDg1IDYzNCw4OSBMNjM0LDIxMSBaIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iNjIyLjIyMjIyMjIyMjIyMjMiIHk9Ijc5LjYwMDAwMDAwMDAwMDAxIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4rOC4yJTwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjYyMi4yMjIyMjIyMjIyMjIzIiB5PSIzMDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjEwMjQ8L3RleHQ+DQo8cGF0aCBjbGFzcz0iczEiIGQ9Ik02OTcsMjExIEw2OTcsODYgUTY5Nyw4MiA3MDEsODIgTDcxNyw4MiBRNzIxLDgyIDcyMSw4NiBMNzIxLDIxMSBaIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iNzA5LjMzMzMzMzMzMzMzMzQiIHk9Ijc2LjUzMzMzMzMzMzMzMzMzIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4rOC40JTwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjcwOS4zMzMzMzMzMzMzMzM0IiB5PSIzMDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjIwNDg8L3RleHQ+DQo8cGF0aCBjbGFzcz0iczEiIGQ9Ik03ODQsMjExIEw3ODQsOTQgUTc4NCw5MCA3ODgsOTAgTDgwNCw5MCBRODA4LDkwIDgwOCw5NCBMODA4LDIxMSBaIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iNzk2LjQ0NDQ0NDQ0NDQ0NDUiIHk9Ijg0LjE5OTk5OTk5OTk5OTk5IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4rNy45JTwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9Ijc5Ni40NDQ0NDQ0NDQ0NDQ1IiB5PSIzMDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjQwOTY8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSI0NDgiIHk9IjMzMCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+dG9rZW5zPC90ZXh0Pg0KPHRleHQgY2xhc3M9Im11dCIgeD0iMTgiIHk9IjIxMSIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgdHJhbnNmb3JtPSJyb3RhdGUoLTkwIDE4IDIxMSkiPuaPkOWNh+eOhzwvdGV4dD4NCjwvc3ZnPg0K" alt="第一轮各档位提升率"><figcaption>图 1 · 第一轮各档位提升率</figcaption></figure>
+<h3 id="section-17">4.3 第二轮：行间流水（收益最大的一轮）</h3>
+<h4 id="section-18">问题分析</h4>
+<p>R1 后 <code>aiv_vec_ratio</code> 约 70.0%（AIV 活跃时间口径；77.8µs ÷ 114.7µs 的墙钟占比约 67.8%），scalar_wait 约占墙钟 84%：单缓冲队列使行 i+1 的装载等行 i 的 V 消费，发射线程被逐行钉住。<strong>消除标量往返只是松绑，行间流水才是把 vec 喂饱的手段。</strong></p>
+<h4 id="section-19">关键变化</h4>
+<p class="lead-in">将 bf16 NORMAL 重写为行间双缓冲流水：用局部行号奇偶选择槽位，按 <code>AllocEventID/SetFlag/WaitFlag/ReleaseEventID</code> 管理事件生命周期，并保证发射与消费条件一致、kernel 退出时无在途事件。数据流与同步关系如下：</p>
+<pre><code class="language-text">槽位：x1[2]/x2[2]（装载 + 兼作 x/y 输出），fp32 工作区单缓冲（仅 V 触碰，
+      V 有序天然安全）；γ/β bf16 暂存借道 row-0 槽位，一次 V_MTE2 守卫释放
+事件：MTE2_V（装载→V）、V_MTE2（槽位释放→装载）、MTE3_MTE2（落盘→装载）
+      各单在途 + 每行一对 V_MTE3；wait 全落在消费 pipe（发射线程零阻塞）；
+      发射条件与消费条件严格一致（i+2 &lt; rowWork），退出零悬挂
+rstd：全程 V 域——reduce 后 1 elem Adds 进 8-lane/行累积块（32B 对齐向量写），
+      每 rowFactor 行 Gather 压缩 + 单次 DataCopyPad 落 GM
+</code></pre>
+<h4 id="section-20">结果</h4>
+<p>NPUGraph：@2048 109.3→<strong>86.7µs</strong>（<strong>-20.7%</strong>），@4096 -21.9%，@512 -7.8%，≤128 档持平（每核行数少，流水收益未超出噪声带）。msprof：wall <strong>86.4µs</strong>（-30.5% vs 基线），<code>aiv_vec_ratio</code> 89.5%（AIV 活跃时间口径），<strong>scalar_wait 106→1.86µs（墙钟占比约 85%→2%）</strong>——发射线程停等显著减少，三 pipe 忙碌和/墙钟 = 1.32。</p>
+<p class="lead-in">指令级流水对比（另一次 msprof <code>TimelineDetail</code> 采集，单独统计，不与上文 PipeUtilization 读数合并）：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th align="right">流水前</th>
+<th align="right">流水后</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>wall</td>
+<td align="right">101.4µs</td>
+<td align="right"><strong>80.7µs</strong></td>
+</tr>
+<tr>
+<td>MTE2 忙碌</td>
+<td align="right">50.8%</td>
+<td align="right"><strong>94.2%</strong></td>
+</tr>
+<tr>
+<td>SCALAR 忙碌</td>
+<td align="right">90.0%</td>
+<td align="right"><strong>2.5%</strong></td>
+</tr>
+<tr>
+<td>三线并行度</td>
+<td align="right">2.27</td>
+<td align="right"><strong>2.87</strong></td>
+</tr>
+</tbody></table>
+<figure id="figure-2"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI5MDAiIGhlaWdodD0iNTEwIiB2aWV3Qm94PSIwIDAgOTAwIDUxMCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPg0KICA8dGl0bGUgaWQ9InRpdGxlIj7ooYzpl7TmtYHmsLTnpLrmhI88L3RpdGxlPg0KICA8ZGVzYyBpZD0iZGVzYyI+5a+55q+U5Y2V5qC45aSE55CG5aSa6KGM5pWw5o2u5pe255qE5Liy6KGM5rWB56iL5LiO5rWB5rC05rWB56iL44CC5LyY5YyW5ZCO77yM5LiL5LiA6KGM6KOF6L295LiO5b2T5YmN6KGM5ZCR6YeP6K6h566X6YeN5Y+g77yM5b2T5YmN6KGM6JC955uY5LiO5LiL5LiA6KGM6K6h566X6YeN5Y+g77yb6KOF6L29IGkrMiDlpI3nlKjooYwgaSDnmoTmp73kvY3vvIzpobvnrYnokL3nm5ggaSDlrozmiJDlkI7miY3og73lvIDlp4vjgII8L2Rlc2M+DQogIDxzdHlsZT4NCiAgICAuc3VyZiB7IGZpbGw6ICNmY2ZjZmI7IH0NCiAgICAuaW5rIHsgZmlsbDogIzBiMGIwYjsgfQ0KICAgIC5pbmsyIHsgZmlsbDogIzUyNTE0ZTsgfQ0KICAgIC5tdXQgeyBmaWxsOiAjNzc3NTcwOyB9DQogICAgLmdyaWQgeyBzdHJva2U6ICNkZWRkZDY7IHN0cm9rZS13aWR0aDogMTsgfQ0KICAgIC5heGlzIHsgc3Ryb2tlOiAjYmJiOWIwOyBzdHJva2Utd2lkdGg6IDE7IH0NCiAgICAubG9hZCB7IGZpbGw6ICMyYTc4ZDY7IH0NCiAgICAuY29tcHV0ZSB7IGZpbGw6ICNlYjY4MzQ7IH0NCiAgICAuc3RvcmUgeyBmaWxsOiAjMWJhZjdhOyB9DQogICAgLndhaXQgeyBmaWxsOiBub25lOyBzdHJva2U6ICNhYWE4OWY7IHN0cm9rZS13aWR0aDogMTsgc3Ryb2tlLWRhc2hhcnJheTogNSA0OyB9DQogICAgLm9uYmFyIHsgZmlsbDogI2ZmZmZmZjsgfQ0KICAgIHRleHQgeyBmb250LWZhbWlseTogJ01pY3Jvc29mdCBZYUhlaScsJ1BpbmdGYW5nIFNDJywnTm90byBTYW5zIENKSyBTQycsJ1NlZ29lIFVJJyxBcmlhbCxzYW5zLXNlcmlmOyB9DQogICAgQG1lZGlhIChwcmVmZXJzLWNvbG9yLXNjaGVtZTogZGFyaykgew0KICAgICAgLnN1cmYgeyBmaWxsOiAjMWExYTE5OyB9DQogICAgICAuaW5rIHsgZmlsbDogI2ZmZmZmZjsgfQ0KICAgICAgLmluazIgeyBmaWxsOiAjZDBjZWM2OyB9DQogICAgICAubXV0IHsgZmlsbDogI2FhYTg5ZjsgfQ0KICAgICAgLmdyaWQgeyBzdHJva2U6ICMzNDM0MzE7IH0NCiAgICAgIC5heGlzIHsgc3Ryb2tlOiAjNTU1MzRkOyB9DQogICAgICAubG9hZCB7IGZpbGw6ICMzOTg3ZTU7IH0NCiAgICAgIC5jb21wdXRlIHsgZmlsbDogI2Q5NTkyNjsgfQ0KICAgICAgLnN0b3JlIHsgZmlsbDogIzE5OWU3MDsgfQ0KICAgICAgLndhaXQgeyBzdHJva2U6ICM3Nzc1NmU7IH0NCiAgICB9DQogIDwvc3R5bGU+DQoNCiAgPHJlY3QgY2xhc3M9InN1cmYiIHg9IjAiIHk9IjAiIHdpZHRoPSI5MDAiIGhlaWdodD0iNTEwIi8+DQogIDx0ZXh0IGNsYXNzPSJpbmsiIHg9IjI0IiB5PSIzMCIgZm9udC1zaXplPSIxNSIgZm9udC13ZWlnaHQ9IjYwMCI+6KGM6Ze05rWB5rC056S65oSP77ya6KOF6L2944CB6K6h566X5LiO6JC955uY55qE6YeN5Y+g77yI5Y2V5qC477yJPC90ZXh0Pg0KICA8dGV4dCBjbGFzcz0iaW5rMiIgeD0iMjQiIHk9IjUyIiBmb250LXNpemU9IjEyIj7lnZflrr3mjInlrp7mtYvph4/nuqfnu5jliLbvvJroo4Xovb3nuqYgMC41wrVz44CB6K6h566X57qmIDEuN8K1c+OAgeiQveebmOe6piAwLjM2wrVzL+ihjDwvdGV4dD4NCg0KICA8dGV4dCBjbGFzcz0iaW5rIiB4PSIyNCIgeT0iODQiIGZvbnQtc2l6ZT0iMTMiIGZvbnQtd2VpZ2h0PSI2MDAiPua1geawtOWJje+8muavj+ihjOijhei9vSDihpIg6K6h566XIOKGkiDokL3nm5jvvIzlhajnqIvkuLLooYw8L3RleHQ+DQogIDx0ZXh0IGNsYXNzPSJpbmsyIiB4PSIyNCIgeT0iMTIyIiBmb250LXNpemU9IjEyIj5NVEUyIOijhei9vTwvdGV4dD4NCiAgPHRleHQgY2xhc3M9ImluazIiIHg9IjI0IiB5PSIxNjIiIGZvbnQtc2l6ZT0iMTIiPlYg6K6h566XPC90ZXh0Pg0KICA8dGV4dCBjbGFzcz0iaW5rMiIgeD0iMjQiIHk9IjIwMiIgZm9udC1zaXplPSIxMiI+TVRFMyDokL3nm5g8L3RleHQ+DQogIDxsaW5lIGNsYXNzPSJncmlkIiB4MT0iMTMwIiB5MT0iOTgiIHgyPSI4NjAiIHkyPSI5OCIvPg0KICA8bGluZSBjbGFzcz0iZ3JpZCIgeDE9IjEzMCIgeTE9IjIxOCIgeDI9Ijg2MCIgeTI9IjIxOCIvPg0KDQogIDxyZWN0IGNsYXNzPSJsb2FkIiB4PSIxNDAiIHk9IjEwNCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjI4IiByeD0iMyIvPg0KICA8dGV4dCBjbGFzcz0ib25iYXIiIHg9IjE3MiIgeT0iMTIyIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7oo4Xovb0gaTwvdGV4dD4NCiAgPHJlY3QgY2xhc3M9ImNvbXB1dGUiIHg9IjIwNCIgeT0iMTQ0IiB3aWR0aD0iMjE0IiBoZWlnaHQ9IjI4IiByeD0iMyIvPg0KICA8dGV4dCBjbGFzcz0ib25iYXIiIHg9IjMxMSIgeT0iMTYyIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7orqHnrpcgaTwvdGV4dD4NCiAgPHJlY3QgY2xhc3M9InN0b3JlIiB4PSI0MTgiIHk9IjE4NCIgd2lkdGg9IjUyIiBoZWlnaHQ9IjI4IiByeD0iMyIvPg0KICA8dGV4dCBjbGFzcz0ib25iYXIiIHg9IjQ0NCIgeT0iMjAyIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7okL3nm5g8L3RleHQ+DQoNCiAgPHJlY3QgY2xhc3M9IndhaXQiIHg9IjIwNCIgeT0iMTA0IiB3aWR0aD0iMjY2IiBoZWlnaHQ9IjI4IiByeD0iMyIvPg0KICA8dGV4dCBjbGFzcz0ibXV0IiB4PSIzMzciIHk9IjEyMiIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+562J5b6F5qe95L2N6YeK5pS+PC90ZXh0Pg0KICA8cmVjdCBjbGFzcz0ibG9hZCIgeD0iNDcwIiB5PSIxMDQiIHdpZHRoPSI2NCIgaGVpZ2h0PSIyOCIgcng9IjMiLz4NCiAgPHRleHQgY2xhc3M9Im9uYmFyIiB4PSI1MDIiIHk9IjEyMiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+6KOF6L29IGkrMTwvdGV4dD4NCiAgPHJlY3QgY2xhc3M9ImNvbXB1dGUiIHg9IjUzNCIgeT0iMTQ0IiB3aWR0aD0iMjE0IiBoZWlnaHQ9IjI4IiByeD0iMyIvPg0KICA8dGV4dCBjbGFzcz0ib25iYXIiIHg9IjY0MSIgeT0iMTYyIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7orqHnrpcgaSsxPC90ZXh0Pg0KICA8cmVjdCBjbGFzcz0ic3RvcmUiIHg9Ijc0OCIgeT0iMTg0IiB3aWR0aD0iNTIiIGhlaWdodD0iMjgiIHJ4PSIzIi8+DQogIDx0ZXh0IGNsYXNzPSJvbmJhciIgeD0iNzc0IiB5PSIyMDIiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuiQveebmDwvdGV4dD4NCiAgPHRleHQgY2xhc3M9ImluazIiIHg9Ijg2MCIgeT0iMjM4IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0iZW5kIj5zY2FsYXJfd2FpdCDiiYggODUlPC90ZXh0Pg0KDQogIDxsaW5lIGNsYXNzPSJheGlzIiB4MT0iMjQiIHkxPSIyNTAiIHgyPSI4NzYiIHkyPSIyNTAiLz4NCg0KICA8dGV4dCBjbGFzcz0iaW5rIiB4PSIyNCIgeT0iMjgyIiBmb250LXNpemU9IjEzIiBmb250LXdlaWdodD0iNjAwIj7mtYHmsLTlkI7vvJroo4Xovb0gaSsxIOS4juiuoeeulyBpIOmHjeWPoO+8jOiQveebmCBpIOS4juiuoeeulyBpKzEg6YeN5Y+gPC90ZXh0Pg0KICA8dGV4dCBjbGFzcz0iaW5rMiIgeD0iMjQiIHk9IjMyNCIgZm9udC1zaXplPSIxMiI+TVRFMiDoo4Xovb08L3RleHQ+DQogIDx0ZXh0IGNsYXNzPSJpbmsyIiB4PSIyNCIgeT0iMzY0IiBmb250LXNpemU9IjEyIj5WIOiuoeeulzwvdGV4dD4NCiAgPHRleHQgY2xhc3M9ImluazIiIHg9IjI0IiB5PSI0MDQiIGZvbnQtc2l6ZT0iMTIiPk1URTMg6JC955uYPC90ZXh0Pg0KICA8bGluZSBjbGFzcz0iZ3JpZCIgeDE9IjEzMCIgeTE9IjI5OCIgeDI9Ijg2MCIgeTI9IjI5OCIvPg0KICA8bGluZSBjbGFzcz0iZ3JpZCIgeDE9IjEzMCIgeTE9IjQxOCIgeDI9Ijg2MCIgeTI9IjQxOCIvPg0KDQogIDxyZWN0IGNsYXNzPSJsb2FkIiB4PSIxNDAiIHk9IjMwNiIgd2lkdGg9IjY0IiBoZWlnaHQ9IjI4IiByeD0iMyIvPg0KICA8dGV4dCBjbGFzcz0ib25iYXIiIHg9IjE3MiIgeT0iMzI0IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7oo4Xovb0gaTwvdGV4dD4NCiAgPHJlY3QgY2xhc3M9ImxvYWQiIHg9IjIwNCIgeT0iMzA2IiB3aWR0aD0iNjQiIGhlaWdodD0iMjgiIHJ4PSIzIi8+DQogIDx0ZXh0IGNsYXNzPSJvbmJhciIgeD0iMjM2IiB5PSIzMjQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuijhei9vSBpKzE8L3RleHQ+DQogIDxyZWN0IGNsYXNzPSJ3YWl0IiB4PSIyNzIiIHk9IjMwNiIgd2lkdGg9IjIyMCIgaGVpZ2h0PSIyOCIgcng9IjMiLz4NCiAgPHRleHQgY2xhc3M9Im11dCIgeD0iMzgyIiB5PSIzMjQiIGZvbnQtc2l6ZT0iMTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuijhei9vSBpKzIg562J6JC955uYIGkg6YeK5pS+5qe95L2N77yITVRFM19NVEUy77yJPC90ZXh0Pg0KICA8cmVjdCBjbGFzcz0ibG9hZCIgeD0iNDk2IiB5PSIzMDYiIHdpZHRoPSI2NCIgaGVpZ2h0PSIyOCIgcng9IjMiLz4NCiAgPHRleHQgY2xhc3M9Im9uYmFyIiB4PSI1MjgiIHk9IjMyNCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+6KOF6L29IGkrMjwvdGV4dD4NCg0KICA8cmVjdCBjbGFzcz0iY29tcHV0ZSIgeD0iMjA0IiB5PSIzNDYiIHdpZHRoPSIyMTQiIGhlaWdodD0iMjgiIHJ4PSIzIi8+DQogIDx0ZXh0IGNsYXNzPSJvbmJhciIgeD0iMzExIiB5PSIzNjQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuiuoeeulyBpPC90ZXh0Pg0KICA8cmVjdCBjbGFzcz0iY29tcHV0ZSIgeD0iNDE4IiB5PSIzNDYiIHdpZHRoPSIyMTQiIGhlaWdodD0iMjgiIHJ4PSIzIi8+DQogIDx0ZXh0IGNsYXNzPSJvbmJhciIgeD0iNTI1IiB5PSIzNjQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPuiuoeeulyBpKzE8L3RleHQ+DQogIDxyZWN0IGNsYXNzPSJjb21wdXRlIiB4PSI2MzIiIHk9IjM0NiIgd2lkdGg9IjIxNCIgaGVpZ2h0PSIyOCIgcng9IjMiLz4NCiAgPHRleHQgY2xhc3M9Im9uYmFyIiB4PSI3MzkiIHk9IjM2NCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+6K6h566XIGkrMjwvdGV4dD4NCg0KICA8cmVjdCBjbGFzcz0ic3RvcmUiIHg9IjQxOCIgeT0iMzg2IiB3aWR0aD0iNzAiIGhlaWdodD0iMjgiIHJ4PSIzIi8+DQogIDx0ZXh0IGNsYXNzPSJvbmJhciIgeD0iNDUzIiB5PSI0MDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPngveSBpPC90ZXh0Pg0KICA8cmVjdCBjbGFzcz0ic3RvcmUiIHg9IjYzMiIgeT0iMzg2IiB3aWR0aD0iNzAiIGhlaWdodD0iMjgiIHJ4PSIzIi8+DQogIDx0ZXh0IGNsYXNzPSJvbmJhciIgeD0iNjY3IiB5PSI0MDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPngveSBpKzE8L3RleHQ+DQogIDxyZWN0IGNsYXNzPSJzdG9yZSIgeD0iODQ2IiB5PSIzODYiIHdpZHRoPSI0NCIgaGVpZ2h0PSIyOCIgcng9IjMiLz4NCiAgPHRleHQgY2xhc3M9Im9uYmFyIiB4PSI4NjgiIHk9IjQwNCIgZm9udC1zaXplPSIxMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+aSsyPC90ZXh0Pg0KDQogIDx0ZXh0IGNsYXNzPSJtdXQiIHg9IjIzNiIgeT0iMzQ0IiBmb250LXNpemU9IjEwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7pooTlj5Y8L3RleHQ+DQogIDx0ZXh0IGNsYXNzPSJpbmsyIiB4PSI4NjAiIHk9IjQzOCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+c2NhbGFyX3dhaXQg4omIIDIlPC90ZXh0Pg0KICA8dGV4dCBjbGFzcz0ibXV0IiB4PSIyNCIgeT0iNDc0IiBmb250LXNpemU9IjExIj5yc3RkIOeVmeWcqOWQkemHj+Wfn++8iEdhdGhlciArIHN0cmlkZS0wIOW5v+aSre+8ie+8jOWPkeWwhOe6v+eoi+WPquWPkeaMh+S7pOOAgeS4jeWBnOetiTwvdGV4dD4NCiAgPHRleHQgY2xhc3M9ImluazIiIHg9IjI0IiB5PSI0OTUiIGZvbnQtc2l6ZT0iMTEiPnNjYWxhcl93YWl077yaODUlIOKGkiAyJeOAgOOAgOS4iee6v+W5tuihjOW6pu+8mjIuMjcg4oaSIDIuODc8L3RleHQ+DQo8L3N2Zz4NCg==" alt="行间流水示意"><figcaption>图 2 · 行间流水示意</figcaption></figure>
+<p>精度测试：通过（当轮 126 用例）。</p>
+<h3 id="section-21">4.4 第三轮：广度轮——序言重叠与旁支变体</h3>
+<p>三处独立小改动，一轮闭环：① NORMAL 序言里 γ/β 的 MTE2 装载提前到 iota 预计算之前（64 次 Duplicate ≈1.6µs 发射与装载重叠），64-128 档受益；② MULTI_N 折叠 1/N（fp16+bf16 共用 ComputeRstd）；③ SINGLE_N 三 dtype 消 V_S/S_V（Gather 广播，复用已死的 reduce 工作区尾块）+ 折叠。</p>
+<p>当轮结果：fp16 @512-2048 <strong>-4.2~-5.3%</strong>（MULTI_N）；bf16 decode 1-4 tokens 的记录读数为 <strong>-2.6~-3.9%</strong>（SINGLE_N），但位于小档噪声带内，不能认定为可靠收益；bf16 大档持平（序言已摊薄）。上述为第三轮历史读数，最终结果见 §4.7。</p>
+<figure id="figure-3"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI3ODAiIGhlaWdodD0iMzkwIiB2aWV3Qm94PSIwIDAgNzgwIDM5MCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPg0KICA8dGl0bGUgaWQ9InRpdGxlIj7nrKzkuInova7lkITmoaPkvY3mj5DljYfnjoc8L3RpdGxlPg0KICA8ZGVzYyBpZD0iZGVzYyI+55u45a+556ys5LqM6L2u77yMYmYxNiDlnKggNTEyIOiHsyA0MDk2IHRva2VuIOWfuuacrOaMgeW5s++8jGZwMTYg5ZyoIDUxMiDoh7MgMjA0OCB0b2tlbiDmj5DljYfnuqYgNC4zJSDoh7MgNS4yJe+8jDQwOTYgdG9rZW4g55qE6LSf6K+75pWw5L2N5LqO5Zmq5aOw5bim5YaF44CCPC9kZXNjPg0KICA8c3R5bGU+DQogICAgLnN1cmYgeyBmaWxsOiAjZmNmY2ZiOyB9IC5pbmsgeyBmaWxsOiAjMGIwYjBiOyB9IC5pbmsyIHsgZmlsbDogIzUyNTE0ZTsgfSAubXV0IHsgZmlsbDogIzg5ODc4MTsgfQ0KICAgIC5ncmlkIHsgc3Ryb2tlOiAjZTFlMGQ5OyBzdHJva2Utd2lkdGg6IDE7IH0gLmJsaW5lIHsgc3Ryb2tlOiAjYzNjMmI3OyBzdHJva2Utd2lkdGg6IDE7IH0NCiAgICAuczEgeyBmaWxsOiAjMmE3OGQ2OyBzdHJva2U6ICMyYTc4ZDY7IH0gLnMyIHsgZmlsbDogI2ViNjgzNDsgc3Ryb2tlOiAjZWI2ODM0OyB9IC5zMyB7IGZpbGw6ICMxYmFmN2E7IHN0cm9rZTogIzFiYWY3YTsgfQ0KICAgIC5zNCB7IGZpbGw6ICNlZGExMDA7IHN0cm9rZTogI2VkYTEwMDsgfSAuczUgeyBmaWxsOiAjZTg3YmE0OyBzdHJva2U6ICNlODdiYTQ7IH0NCiAgICAubmVnIHsgZmlsbDogI2UzNDk0ODsgc3Ryb2tlOiAjZTM0OTQ4OyB9DQogICAgdGV4dCB7IGZvbnQtZmFtaWx5OiAnTWljcm9zb2Z0IFlhSGVpJywnUGluZ0ZhbmcgU0MnLCdOb3RvIFNhbnMgQ0pLIFNDJywnU2Vnb2UgVUknLEFyaWFsLHNhbnMtc2VyaWY7IH0NCiAgICBAbWVkaWEgKHByZWZlcnMtY29sb3Itc2NoZW1lOiBkYXJrKSB7DQogICAgICAuc3VyZiB7IGZpbGw6ICMxYTFhMTk7IH0gLmluayB7IGZpbGw6ICNmZmZmZmY7IH0gLmluazIgeyBmaWxsOiAjYzNjMmI3OyB9IC5tdXQgeyBmaWxsOiAjODk4NzgxOyB9DQogICAgICAuZ3JpZCB7IHN0cm9rZTogIzJjMmMyYTsgfSAuYmxpbmUgeyBzdHJva2U6ICMzODM4MzU7IH0NCiAgICAgIC5zMSB7IGZpbGw6ICMzOTg3ZTU7IHN0cm9rZTogIzM5ODdlNTsgfSAuczIgeyBmaWxsOiAjZDk1OTI2OyBzdHJva2U6ICNkOTU5MjY7IH0gLnMzIHsgZmlsbDogIzE5OWU3MDsgc3Ryb2tlOiAjMTk5ZTcwOyB9DQogICAgICAuczQgeyBmaWxsOiAjYzk4NTAwOyBzdHJva2U6ICNjOTg1MDA7IH0gLnM1IHsgZmlsbDogI2Q1NTE4MTsgc3Ryb2tlOiAjZDU1MTgxOyB9DQogICAgICAubmVnIHsgZmlsbDogI2U2Njc2Nzsgc3Ryb2tlOiAjZTY2NzY3OyB9DQogICAgfQ0KICA8L3N0eWxlPg0KPHJlY3QgY2xhc3M9InN1cmYiIHg9IjAiIHk9IjAiIHdpZHRoPSI3ODAiIGhlaWdodD0iMzkwIi8+DQo8dGV4dCBjbGFzcz0iaW5rIiB4PSIyNCIgeT0iMzAiIGZvbnQtc2l6ZT0iMTUiIGZvbnQtd2VpZ2h0PSI2MDAiPuesrOS4iei9ruWQhOaho+S9jeaPkOWNh+eOh++8iOebuOWvueesrOS6jOi9ru+8m+ato+S4uuabtOW/q++8iTwvdGV4dD4NCg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjI0IiB5PSI0OCIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9InN0YXJ0Ij5OUFVHcmFwaO+8jGhpZGRlbj03MTY477ybZnAxNkA0MDk2IOS4uuWZquWjsOW4puWGheeahOi0n+ivu+aVsDwvdGV4dD4NCjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMzApIj4NCjxsaW5lIGNsYXNzPSJncmlkIiB4MT0iNTYiIHkxPSI3OCIgeDI9Ijc2MCIgeTI9Ijc4Ii8+DQo8bGluZSBjbGFzcz0iZ3JpZCIgeDE9IjU2IiB5MT0iMjg4IiB4Mj0iNzYwIiB5Mj0iMjg4Ii8+DQo8bGluZSBjbGFzcz0iYmxpbmUiIHgxPSI1NiIgeTE9IjE4MyIgeDI9Ijc2MCIgeTI9IjE4MyIvPg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNDgiIHk9IjgyLjkwOTA5MDkwOTA5MDkiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJlbmQiPis1JTwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjQ4IiB5PSIyOTIuMCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+LTUlPC90ZXh0Pg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNDgiIHk9IjE4Ny40NTQ1NDU0NTQ1NDU0NCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+MCU8L3RleHQ+DQo8cGF0aCBjbGFzcz0iczEiIGQ9Ik0xMTksMTgzIEwxMTksMTM1IFExMTksMTMxIDEyMywxMzEgTDEzOSwxMzEgUTE0MywxMzEgMTQzLDEzNSBMMTQzLDE4MyBaIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iMTMxLjAiIHk9IjEyNS4xODE4MTgxODE4MTgxOSIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+KzIuNSU8L3RleHQ+DQo8cGF0aCBjbGFzcz0iczIiIGQ9Ik0xNDUsMTgzIEwxNDUsOTcgUTE0NSw5MyAxNDksOTMgTDE2NSw5MyBRMTY5LDkzIDE2OSw5NyBMMTY5LDE4MyBaIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iMTU3LjAiIHk9Ijg3LjU0NTQ1NDU0NTQ1NDU2IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4rNC4zJTwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjE0NC4wIiB5PSIzMDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjUxMjwvdGV4dD4NCjxwYXRoIGNsYXNzPSJzMSIgZD0iTTI5NSwxODMgTDI5NSwxNDkgUTI5NSwxNDUgMjk5LDE0NSBMMzE1LDE0NSBRMzE5LDE0NSAzMTksMTQ5IEwzMTksMTgzIFoiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSIzMDcuMCIgeT0iMTM5LjgxODE4MTgxODE4MTgiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPisxLjglPC90ZXh0Pg0KPHBhdGggY2xhc3M9InMyIiBkPSJNMzIxLDE4MyBMMzIxLDc4IFEzMjEsNzQgMzI1LDc0IEwzNDEsNzQgUTM0NSw3NCAzNDUsNzggTDM0NSwxODMgWiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjMzMy4wIiB5PSI2OC43MjcyNzI3MjcyNzI3MiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+KzUuMiU8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSIzMjAuMCIgeT0iMzA0IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xMDI0PC90ZXh0Pg0KPHBhdGggY2xhc3M9InMxIiBkPSJNNDcxLDE4MyBMNDcxLDE2OCBRNDcxLDE2NCA0NzUsMTY0IEw0OTEsMTY0IFE0OTUsMTY0IDQ5NSwxNjggTDQ5NSwxODMgWiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjQ4My4wIiB5PSIxNTguNjM2MzYzNjM2MzYzNjMiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPiswLjklPC90ZXh0Pg0KPHBhdGggY2xhc3M9InMyIiBkPSJNNDk3LDE4MyBMNDk3LDc4IFE0OTcsNzQgNTAxLDc0IEw1MTcsNzQgUTUyMSw3NCA1MjEsNzggTDUyMSwxODMgWiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjUwOS4wIiB5PSI2OC43MjcyNzI3MjcyNzI3MiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+KzUuMiU8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSI0OTYuMCIgeT0iMzA0IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4yMDQ4PC90ZXh0Pg0KPHBhdGggY2xhc3M9InMxIiBkPSJNNjQ3LDE4MyBMNjQ3LDE4MyBRNjQ3LDE3OSA2NTEsMTc5IEw2NjcsMTc5IFE2NzEsMTc5IDY3MSwxODMgTDY3MSwxODMgWiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjY1OS4wIiB5PSIxNzMuMjcyNzI3MjcyNzI3MjUiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPiswLjIlPC90ZXh0Pg0KPHBhdGggY2xhc3M9InMyIiBkPSJNNjczLDE4MyBMNjczLDI1MCBRNjc3LDI1MCA2OTcsMjUwIEw2OTcsMTc5IFE2OTcsMTgzIDY5MywxODMgTDY3MywxODMgWiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjY4NS4wIiB5PSIyNjQuMzYzNjM2MzYzNjM2NCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+LTMuMiU8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSI2NzIuMCIgeT0iMzA0IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj40MDk2PC90ZXh0Pg0KPC9nPg0KPHJlY3QgY2xhc3M9InMxIiB4PSI1NiIgeT0iNjIiIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiIgcng9IjIiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSI3NCIgeT0iNzIiIGZvbnQtc2l6ZT0iMTIiIHRleHQtYW5jaG9yPSJzdGFydCI+YmYxNjwvdGV4dD4NCjxyZWN0IGNsYXNzPSJzMiIgeD0iMTIyIiB5PSI2MiIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEyIiByeD0iMiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjE0MCIgeT0iNzIiIGZvbnQtc2l6ZT0iMTIiIHRleHQtYW5jaG9yPSJzdGFydCI+ZnAxNjwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjQwOCIgeT0iMzc1IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj50b2tlbnM8L3RleHQ+DQo8L3N2Zz4NCg==" alt="第三轮各档位提升率"><figcaption>图 3 · 第三轮各档位提升率</figcaption></figure>
+<h3 id="section-22">4.5 检视修复轮：补齐正确性与边界验证</h3>
+<p class="lead-in">外部静态检视 7 条，全部采纳，其中三条是<strong>真缺陷</strong>且两条为本轮优化引入：</p>
+<table><colgroup><col style="width:7%"><col style="width:45%"><col style="width:48%"></colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>问题</th>
+<th>处置与教训</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>rstd 压缩 Gather 索引按 <code>[b×32]×8</code> 生成——偏移张量<strong>按字节逐元素</strong>消费，n&gt;8 时行值重复 8 份</td>
+<td>iota 改连续 <code>[0,32,...]</code>，<strong>标量 SetValue</strong> 写入（逐元素 V-store 4B 非对齐当场 fault——修复引入又当场修复）；新增针对性回归</td>
+</tr>
+<tr>
+<td>2</td>
+<td>bf16 NORMAL 缓冲随 numCol 比例增长，hidden=8192 时预算 199,808B &gt; 可用 195,584B（原 11264 常量实为 16B/列全宽安全设计）</td>
+<td>tiling 按 dtype/β 的<strong>每列字节成本模型</strong>驱动，超限回退 SPLIT_D；回退保持 colTileNum≥2（单 chunk 是 SPLIT_D 从未验证过的路径，设备实测每核一整行垃圾）</td>
+</tr>
+<tr>
+<td>3</td>
+<td>1/N 后移扩大溢出域：在 hidden=7168、x≈3e17 的回归输入下 raw sum(x²) 为 Inf，而逐元素缩放的 golden 有限</td>
+<td>fp32/bf16 <strong>回退折叠</strong>（@2048 +4.5% 为正确性代价）；fp16 保留（max raw sum 5.3e13 ≪ fp32 max，有界证明入注释）</td>
+</tr>
+<tr>
+<td>4-5,7</td>
+<td>beta 无 shape/dtype 校验；epsilon 放过 NaN（NaN&lt;0=false，且<strong>调用点丢弃返回值</strong>）；numel 无 32 位防护</td>
+<td>host 侧补齐；epsilon 修复要点是让返回值真正被检查</td>
+</tr>
+<tr>
+<td>6</td>
+<td>原精度验证未充分覆盖数值与边界缺陷</td>
+<td><strong>新增独立精度测试</strong>（不动原文件），补行间对比、极值输入、UB 边界 col=8192、尾块 rows=313/2064/2600、无 β、epsilon/beta 拒绝路径；测试通过</td>
+</tr>
+</tbody></table>
+<p>精度测试：通过（当轮原 126 用例 + 新增 150 用例；后续补充 4 用例，最终新增用例共 154 个）。代价：@2048 89.8µs（85.9 → +4.5%）。精度与边界验证先行，再评价性能收益。</p>
+<p class="lead-in"><strong>优化后 NORMAL 路径 UB 预算表</strong>（bf16，hidden=7168；单位统一 KiB=1024B，可用 UB = 192KiB − 1KiB 系统保留 = 191KiB = 195,584B）：</p>
+<table><colgroup><col style="width:55%"><col style="width:17%"><col style="width:28%"></colgroup>
+<thead>
+<tr>
+<th>缓冲</th>
+<th align="right">每列成本</th>
+<th align="right">hidden=7168 占用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>x1[2] / x2[2] 双缓冲（bf16，各 2×7168×2B）</td>
+<td align="right">8 B</td>
+<td align="right">28 KiB ×2</td>
+</tr>
+<tr>
+<td>xFp32Buf + sqxBuf（fp32 工作区）</td>
+<td align="right">8 B</td>
+<td align="right">28 KiB ×2</td>
+</tr>
+<tr>
+<td>γ/β fp32 常驻</td>
+<td align="right">8 B</td>
+<td align="right">28 KiB ×2</td>
+</tr>
+<tr>
+<td>rstdAcc（8-lane/行 × rowFactor=64）</td>
+<td align="right">—</td>
+<td align="right">2 KiB</td>
+</tr>
+<tr>
+<td>iota + compBuf + reduceFp32</td>
+<td align="right">—</td>
+<td align="right">0.75 KiB</td>
+</tr>
+<tr>
+<td>one / zeroOff / rstdBcast</td>
+<td align="right">—</td>
+<td align="right">0.09 KiB</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td align="right"><strong>24 B/列</strong></td>
+<td align="right"><strong>170.8 KiB</strong>（余量 20.2 KiB）</td>
+</tr>
+</tbody></table>
+<p>hidden=8192 推导：24 × 8192 + 3200 = 199,808B &gt; 195,584B → 超限。固定项 3200B 的构成：
+实际缓冲 2912B（2KiB + 0.75KiB + 96B）+ 288B 对齐/备用预留。回退阈值公式（与代码
+<code>DetermineModeParameters</code> 一致）：<code>numColAlign ≤ (195584 − 3200) / 24 = 8016 列</code>
+——对齐到 16 的倍数后 7168 走 NORMAL、8192 回退 SPLIT_D（7168 的编码常量余量
+19.9 KiB）。host 侧以同式实装为成本模型，kernel 不再自行假设预算。</p>
+<p><strong>最终精度测试结果：通过</strong>（原 126 用例 + 新增 154 用例；按设备测试记录汇总）。新增测试覆盖不同 dtype、行间对比、极值输入、压缩尾块、UB 边界、无 β 及非法参数路径。未覆盖项：全零/Inf 输入、输入输出别名与原地约束。</p>
+<figure id="figure-4"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI3ODAiIGhlaWdodD0iMzkwIiB2aWV3Qm94PSIwIDAgNzgwIDM5MCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPg0KICA8dGl0bGUgaWQ9InRpdGxlIj7mo4Dop4bkv67lpI3nmoTmraPnoa7mgKfku6Pku7fkuI7ntK/orqHmlLbnm4o8L3RpdGxlPg0KICA8ZGVzYyBpZD0iZGVzYyI+YmYxNiDml7blu7blr7nmr5TjgILmo4Dop4bkv67lpI3nlaXlvq7lop7liqDogJfml7bvvIzkvYYgMjA0OCDlkowgNDA5NiB0b2tlbiDnm7jmr5Tln7rnur/ku43liIbliKvntK/orqHmj5DljYcgMjQuOCUg5ZKMIDI2Ljgl44CCPC9kZXNjPg0KICA8c3R5bGU+DQogICAgLnN1cmYgeyBmaWxsOiAjZmNmY2ZiOyB9IC5pbmsgeyBmaWxsOiAjMGIwYjBiOyB9IC5pbmsyIHsgZmlsbDogIzUyNTE0ZTsgfSAubXV0IHsgZmlsbDogIzg5ODc4MTsgfQ0KICAgIC5ncmlkIHsgc3Ryb2tlOiAjZTFlMGQ5OyBzdHJva2Utd2lkdGg6IDE7IH0gLmJsaW5lIHsgc3Ryb2tlOiAjYzNjMmI3OyBzdHJva2Utd2lkdGg6IDE7IH0NCiAgICAuczEgeyBmaWxsOiAjMmE3OGQ2OyBzdHJva2U6ICMyYTc4ZDY7IH0gLnMyIHsgZmlsbDogI2ViNjgzNDsgc3Ryb2tlOiAjZWI2ODM0OyB9IC5zMyB7IGZpbGw6ICMxYmFmN2E7IHN0cm9rZTogIzFiYWY3YTsgfQ0KICAgIC5zNCB7IGZpbGw6ICNlZGExMDA7IHN0cm9rZTogI2VkYTEwMDsgfSAuczUgeyBmaWxsOiAjZTg3YmE0OyBzdHJva2U6ICNlODdiYTQ7IH0NCiAgICAubmVnIHsgZmlsbDogI2UzNDk0ODsgc3Ryb2tlOiAjZTM0OTQ4OyB9DQogICAgdGV4dCB7IGZvbnQtZmFtaWx5OiAnTWljcm9zb2Z0IFlhSGVpJywnUGluZ0ZhbmcgU0MnLCdOb3RvIFNhbnMgQ0pLIFNDJywnU2Vnb2UgVUknLEFyaWFsLHNhbnMtc2VyaWY7IH0NCiAgICBAbWVkaWEgKHByZWZlcnMtY29sb3Itc2NoZW1lOiBkYXJrKSB7DQogICAgICAuc3VyZiB7IGZpbGw6ICMxYTFhMTk7IH0gLmluayB7IGZpbGw6ICNmZmZmZmY7IH0gLmluazIgeyBmaWxsOiAjYzNjMmI3OyB9IC5tdXQgeyBmaWxsOiAjODk4NzgxOyB9DQogICAgICAuZ3JpZCB7IHN0cm9rZTogIzJjMmMyYTsgfSAuYmxpbmUgeyBzdHJva2U6ICMzODM4MzU7IH0NCiAgICAgIC5zMSB7IGZpbGw6ICMzOTg3ZTU7IHN0cm9rZTogIzM5ODdlNTsgfSAuczIgeyBmaWxsOiAjZDk1OTI2OyBzdHJva2U6ICNkOTU5MjY7IH0gLnMzIHsgZmlsbDogIzE5OWU3MDsgc3Ryb2tlOiAjMTk5ZTcwOyB9DQogICAgICAuczQgeyBmaWxsOiAjYzk4NTAwOyBzdHJva2U6ICNjOTg1MDA7IH0gLnM1IHsgZmlsbDogI2Q1NTE4MTsgc3Ryb2tlOiAjZDU1MTgxOyB9DQogICAgICAubmVnIHsgZmlsbDogI2U2Njc2Nzsgc3Ryb2tlOiAjZTY2NzY3OyB9DQogICAgfQ0KICA8L3N0eWxlPg0KPHJlY3QgY2xhc3M9InN1cmYiIHg9IjAiIHk9IjAiIHdpZHRoPSI3ODAiIGhlaWdodD0iMzkwIi8+DQo8dGV4dCBjbGFzcz0iaW5rIiB4PSIyNCIgeT0iMzAiIGZvbnQtc2l6ZT0iMTUiIGZvbnQtd2VpZ2h0PSI2MDAiPuajgOinhuS/ruWkjei9ru+8muato+ehruaAp+eahOaAp+iDveS7o+S7t+S4jue0r+iuoeaUtuebiu+8iGJmMTbvvIzCtXPvvIk8L3RleHQ+DQoNCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSIyNCIgeT0iNDgiIGZvbnQtc2l6ZT0iMTIiIHRleHQtYW5jaG9yPSJzdGFydCI+TlBVR3JhcGjvvIxoaWRkZW49NzE2OO+8m+WbnumAgCAxL04g5oqY5Y+g5oGi5aSN5rqi5Ye66K+t5LmJ5ZCOIEAyMDQ4ICs0LjUl77yM57Sv6K6h5LuNIC0yNC44JTwvdGV4dD4NCjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMzApIj4NCjxsaW5lIGNsYXNzPSJncmlkIiB4MT0iNTYiIHkxPSIyNDUiIHgyPSI3NjAiIHkyPSIyNDUiLz4NCjxsaW5lIGNsYXNzPSJncmlkIiB4MT0iNTYiIHkxPSIyMDIiIHgyPSI3NjAiIHkyPSIyMDIiLz4NCjxsaW5lIGNsYXNzPSJncmlkIiB4MT0iNTYiIHkxPSIxNjAiIHgyPSI3NjAiIHkyPSIxNjAiLz4NCjxsaW5lIGNsYXNzPSJncmlkIiB4MT0iNTYiIHkxPSIxMTciIHgyPSI3NjAiIHkyPSIxMTciLz4NCjxsaW5lIGNsYXNzPSJncmlkIiB4MT0iNTYiIHkxPSI3NSIgeDI9Ijc2MCIgeTI9Ijc1Ii8+DQo8bGluZSBjbGFzcz0iYmxpbmUiIHgxPSI1NiIgeTE9IjI4OCIgeDI9Ijc2MCIgeTI9IjI4OCIvPg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNDgiIHk9IjI0OS40MDc0MDc0MDc0MDc0MiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+NTA8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSI0OCIgeT0iMjA2LjgxNDgxNDgxNDgxNDgiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJlbmQiPjEwMDwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjQ4IiB5PSIxNjQuMjIyMjIyMjIyMjIyMjMiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJlbmQiPjE1MDwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjQ4IiB5PSIxMjEuNjI5NjI5NjI5NjI5NjUiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJlbmQiPjIwMDwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjQ4IiB5PSI3OS4wMzcwMzcwMzcwMzcwNCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+MjUwPC90ZXh0Pg0KPHBhdGggY2xhc3M9InMxIiBkPSJNMTk0LDI4OCBMMTk0LDE5MCBRMTk0LDE4NiAxOTgsMTg2IEwyMTQsMTg2IFEyMTgsMTg2IDIxOCwxOTAgTDIxOCwyODggWiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjIwNi4wIiB5PSIxODAuMjgwMzcwMzcwMzcwMzgiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjExOS40PC90ZXh0Pg0KPHBhdGggY2xhc3M9InMyIiBkPSJNMjIwLDI4OCBMMjIwLDIxOCBRMjIwLDIxNCAyMjQsMjE0IEwyNDAsMjE0IFEyNDQsMjE0IDI0NCwyMTggTDI0NCwyODggWiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjIzMi4wIiB5PSIyMDguODAwMzcwMzcwMzcwNCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+ODUuOTwvdGV4dD4NCjxwYXRoIGNsYXNzPSJzMyIgZD0iTTI0NiwyODggTDI0NiwyMTUgUTI0NiwyMTEgMjUwLDIxMSBMMjY2LDIxMSBRMjcwLDIxMSAyNzAsMjE1IEwyNzAsMjg4IFoiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSIyNTguMCIgeT0iMjA1LjQ5NTE4NTE4NTE4NTIiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjg5Ljg8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSIyMzIuMCIgeT0iMzA0IiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj50b2tlbnM9MjA0ODwvdGV4dD4NCjxwYXRoIGNsYXNzPSJzMSIgZD0iTTU0NiwyODggTDU0Niw3OCBRNTQ2LDc0IDU1MCw3NCBMNTY2LDc0IFE1NzAsNzQgNTcwLDc4IEw1NzAsMjg4IFoiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSI1NTguMCIgeT0iNjguMjc4ODg4ODg4ODg4OSIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MjUwLjk8L3RleHQ+DQo8cGF0aCBjbGFzcz0iczIiIGQ9Ik01NzIsMjg4IEw1NzIsMTM4IFE1NzIsMTM0IDU3NiwxMzQgTDU5MiwxMzQgUTU5NiwxMzQgNTk2LDEzOCBMNTk2LDI4OCBaIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iNTg0LjAiIHk9IjEyOC40NDUxODUxODUxODUyIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xODAuMzwvdGV4dD4NCjxwYXRoIGNsYXNzPSJzMyIgZD0iTTU5OCwyODggTDU5OCwxMzUgUTU5OCwxMzEgNjAyLDEzMSBMNjE4LDEzMSBRNjIyLDEzMSA2MjIsMTM1IEw2MjIsMjg4IFoiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSI2MTAuMCIgeT0iMTEyIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xODMuNzwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjU4NC4wIiB5PSIzMDQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnRva2Vucz00MDk2PC90ZXh0Pg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjIzMi4wIiB5PSIxNjQuMjgwMzcwMzcwMzcwMzgiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPi0yNC44JSB2cyDln7rnur88L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSIyNDYuMCIgeT0iMTkyLjgwMDM3MDM3MDM3MDQiIGZvbnQtc2l6ZT0iMTAiIHRleHQtYW5jaG9yPSJzdGFydCI+4oaQICs0LjUlIOato+ehruaAp+S7o+S7tzwvdGV4dD4NCjwvZz4NCjxyZWN0IGNsYXNzPSJzMSIgeD0iNTYiIHk9IjYyIiB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHJ4PSIyIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iNzQiIHk9IjcyIiBmb250LXNpemU9IjEyIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuWfuue6vzwvdGV4dD4NCjxyZWN0IGNsYXNzPSJzMiIgeD0iMTE4IiB5PSI2MiIgd2lkdGg9IjEyIiBoZWlnaHQ9IjEyIiByeD0iMiIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjEzNiIgeT0iNzIiIGZvbnQtc2l6ZT0iMTIiIHRleHQtYW5jaG9yPSJzdGFydCI+5qOA6KeG5L+u5aSN5YmNPC90ZXh0Pg0KPHJlY3QgY2xhc3M9InMzIiB4PSIyMTkiIHk9IjYyIiB3aWR0aD0iMTIiIGhlaWdodD0iMTIiIHJ4PSIyIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iMjM3IiB5PSI3MiIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9InN0YXJ0Ij7mo4Dop4bkv67lpI3lkI48L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSIxOCIgeT0iMjEyIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiB0cmFuc2Zvcm09InJvdGF0ZSgtOTAgMTggMjEyKSI+5pe25bu277yIwrVz77yJPC90ZXh0Pg0KPC9zdmc+DQo=" alt="检视修复的正确性代价与累计收益"><figcaption>图 4 · 检视修复的正确性代价与累计收益</figcaption></figure>
+<h3 id="section-23">4.6 负结果：Reduce 依赖链重构未取得显著收益</h3>
+<p class="lead-in">实验记录如下：</p>
+<ol>
+<li><strong>假设</strong>：legacy 归约的单指令多 repeat <code>Add(..., dstRepStride=0)</code> 在同一累加块上形成 112 深 RAW 链，顺序 V 管线应完整暴露该延迟（估 0.3-0.6µs/行）；8 链交错发射可消除。</li>
+<li><strong>实验变量</strong>：新增 <code>ReduceSumFP32Parallel</code>（8×64-float 累加器、交错发射、显式两两折叠 + WRS），仅切换流水化 bf16 路径的 reduce 调用，其余不动；过程中按二分法变换发射顺序与操作数位次（V1/V2a/V2b，见下表）。</li>
+<li><strong>控制变量</strong>：数据、shape、设备、测量口径全部不变；每轮 clean build + md5 自检。</li>
+<li class="lead-in"><strong>设备观测</strong>：</li>
+</ol>
+<table><colgroup><col style="width:19%"><col style="width:34%"><col style="width:47%"></colgroup>
+<thead>
+<tr>
+<th>实验</th>
+<th>发射顺序 / 操作数位次</th>
+<th>观测</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>V1</td>
+<td>交错发射，累加器在 src1（dst==src1）</td>
+<td><strong>vector core exception</strong>（col=7168 无尾也崩 → 与尾路径无关）</td>
+</tr>
+<tr>
+<td>V2a</td>
+<td>链主体顺序发射（其余同 V1）</td>
+<td>通过 → 故障定位于交错本身</td>
+</tr>
+<tr>
+<td>V2b</td>
+<td>交错发射，累加器在 <strong>src0</strong>（dst==src0）</td>
+<td>通过 → 可用形式</td>
+</tr>
+<tr>
+<td>V2b 最终版</td>
+<td>精度测试通过（当轮新增 150 用例 + 原 126 用例）</td>
+<td>@2048 89.09 vs 89.81µs（<strong>-0.8%，噪声级</strong>）；vec busy 约 77.4µs，未观测到明显下降</td>
+</tr>
+</tbody></table>
+<ol start="5">
+<li><strong>性能与正确性结果</strong>：正确性零回退；性能收益 -0.8% 为噪声级——<strong>当前配置下未观测到可测的依赖延迟收益</strong>。观测与解释分开记录：设备观测是&quot;交错 8 链与单指令 112-repeat 链等速&quot;；对此的候选解释（未做微架构级验证）包括硬件对 repeat 间累加内部转发/按吞吐执行；静态分析发现的 0.44µs/行&quot;未解释缺口&quot;同样存在多个未验证候选（cast 半吞吐、barrier 开销等），不归因于单一因素。</li>
+<li><strong>结论</strong>（按强度分级）：<strong>性能实测</strong>——交错 8 链重构在当前配置下收益为噪声级；<strong>设备观测</strong>——本轮 c220 配置中，交错发射的单 repeat <code>Add</code> 在 dst 轮转且 dst==src1 时触发 vector core exception，累加器改放 src0 位后通过（顺序发射时 dst==src1 也通过）；<strong>待验证假设</strong>——多 repeat 累加的内部机制、依赖延迟是否在其他配置下可观测，以及 V 时间缺口的构成。</li>
+<li><strong>回退及原因</strong>：整体回退——收益噪声级、112 条标量发射/行 vs legacy 1 条（issue 侧反而更重）、+1.75KB UB；负结果与机理留档，避免未来重复推导。</li>
+</ol>
+<h3 id="section-24">4.7 总收益与最终状态</h3>
+<p class="lead-in"><strong>累计优化（NPUGraph，hidden=7168，µs）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th align="right">@512</th>
+<th align="right">@1024</th>
+<th align="right">@2048</th>
+<th align="right">@4096</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>基线</td>
+<td align="right">33.2</td>
+<td align="right">59.0</td>
+<td align="right">119.4</td>
+<td align="right">250.9</td>
+</tr>
+<tr>
+<td>+ 第一轮（消往返/冗余 pass）</td>
+<td align="right">30.8</td>
+<td align="right">54.2</td>
+<td align="right">109.3</td>
+<td align="right">231.1</td>
+</tr>
+<tr>
+<td>+ 第二轮（行间流水）</td>
+<td align="right">28.4</td>
+<td align="right">47.9</td>
+<td align="right">86.7</td>
+<td align="right">180.6</td>
+</tr>
+<tr>
+<td>+ 第三轮（广度）</td>
+<td align="right">27.7</td>
+<td align="right">47.1</td>
+<td align="right">85.9</td>
+<td align="right">180.3</td>
+</tr>
+<tr>
+<td>+ 检视修复（溢出域回退）</td>
+<td align="right"><strong>29.4</strong></td>
+<td align="right"><strong>49.5</strong></td>
+<td align="right"><strong>89.8</strong></td>
+<td align="right"><strong>183.7</strong></td>
+</tr>
+<tr>
+<td><strong>累计</strong></td>
+<td align="right"><strong>-11.4%</strong></td>
+<td align="right"><strong>-16.2%</strong></td>
+<td align="right"><strong>-24.8%</strong></td>
+<td align="right"><strong>-26.8%</strong></td>
+</tr>
+</tbody></table>
+<figure id="figure-5"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4ODAiIGhlaWdodD0iNDcwIiB2aWV3Qm94PSIwIDAgODgwIDQ3MCIgcHJlc2VydmVBc3BlY3RSYXRpbz0ieE1pZFlNaWQgbWVldCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPg0KICA8dGl0bGUgaWQ9InRpdGxlIj7lkITniYjmnKzml7blu7bmvJTov5s8L3RpdGxlPg0KICA8ZGVzYyBpZD0iZGVzYyI+YmYxNuOAgWhpZGRlbiDnrYnkuo4gNzE2OCDnmoQgTlBVR3JhcGgg5rWL6YeP57uT5p6c44CC6ZqP552A5LyY5YyW5o6o6L+b77yMMjA0OCB0b2tlbiDml7blu7bnlLEgMTE5LjQg5b6u56eS6ZmN6IezIDg5Ljgg5b6u56eS77yMNDA5NiB0b2tlbiDnlLEgMjUwLjkg5b6u56eS6ZmN6IezIDE4My43IOW+ruenkuOAgjwvZGVzYz4NCiAgPHN0eWxlPg0KICAgIC5zdXJmIHsgZmlsbDogI2ZjZmNmYjsgfSAuaW5rIHsgZmlsbDogIzBiMGIwYjsgfSAuaW5rMiB7IGZpbGw6ICM1MjUxNGU7IH0gLm11dCB7IGZpbGw6ICM4OTg3ODE7IH0NCiAgICAuZ3JpZCB7IHN0cm9rZTogI2UxZTBkOTsgc3Ryb2tlLXdpZHRoOiAxOyB9IC5ibGluZSB7IHN0cm9rZTogI2MzYzJiNzsgc3Ryb2tlLXdpZHRoOiAxOyB9DQogICAgLnMxIHsgZmlsbDogIzJhNzhkNjsgc3Ryb2tlOiAjMmE3OGQ2OyB9IC5zMiB7IGZpbGw6ICNlYjY4MzQ7IHN0cm9rZTogI2ViNjgzNDsgfSAuczMgeyBmaWxsOiAjMWJhZjdhOyBzdHJva2U6ICMxYmFmN2E7IH0NCiAgICAuczQgeyBmaWxsOiAjZWRhMTAwOyBzdHJva2U6ICNlZGExMDA7IH0gLnM1IHsgZmlsbDogI2U4N2JhNDsgc3Ryb2tlOiAjZTg3YmE0OyB9DQogICAgLm5lZyB7IGZpbGw6ICNlMzQ5NDg7IHN0cm9rZTogI2UzNDk0ODsgfQ0KICAgIHRleHQgeyBmb250LWZhbWlseTogJ01pY3Jvc29mdCBZYUhlaScsJ1BpbmdGYW5nIFNDJywnTm90byBTYW5zIENKSyBTQycsJ1NlZ29lIFVJJyxBcmlhbCxzYW5zLXNlcmlmOyB9DQogICAgcG9seWxpbmUgeyBmaWxsOiBub25lICFpbXBvcnRhbnQ7IH0NCiAgICBAbWVkaWEgKHByZWZlcnMtY29sb3Itc2NoZW1lOiBkYXJrKSB7DQogICAgICAuc3VyZiB7IGZpbGw6ICMxYTFhMTk7IH0gLmluayB7IGZpbGw6ICNmZmZmZmY7IH0gLmluazIgeyBmaWxsOiAjYzNjMmI3OyB9IC5tdXQgeyBmaWxsOiAjODk4NzgxOyB9DQogICAgICAuZ3JpZCB7IHN0cm9rZTogIzJjMmMyYTsgfSAuYmxpbmUgeyBzdHJva2U6ICMzODM4MzU7IH0NCiAgICAgIC5zMSB7IGZpbGw6ICMzOTg3ZTU7IHN0cm9rZTogIzM5ODdlNTsgfSAuczIgeyBmaWxsOiAjZDk1OTI2OyBzdHJva2U6ICNkOTU5MjY7IH0gLnMzIHsgZmlsbDogIzE5OWU3MDsgc3Ryb2tlOiAjMTk5ZTcwOyB9DQogICAgICAuczQgeyBmaWxsOiAjYzk4NTAwOyBzdHJva2U6ICNjOTg1MDA7IH0gLnM1IHsgZmlsbDogI2Q1NTE4MTsgc3Ryb2tlOiAjZDU1MTgxOyB9DQogICAgICAubmVnIHsgZmlsbDogI2U2Njc2Nzsgc3Ryb2tlOiAjZTY2NzY3OyB9DQogICAgfQ0KICAgICAgLnJpbmcgeyBzdHJva2U6ICNmY2ZjZmI7IH0NCiAgICBAbWVkaWEgKHByZWZlcnMtY29sb3Itc2NoZW1lOiBkYXJrKSB7IC5yaW5nIHsgc3Ryb2tlOiAjMWExYTE5OyB9IH0NCiAgPC9zdHlsZT4NCjxyZWN0IGNsYXNzPSJzdXJmIiB4PSIwIiB5PSIwIiB3aWR0aD0iODgwIiBoZWlnaHQ9IjQ2MCIvPg0KPHRleHQgY2xhc3M9ImluayIgeD0iMjQiIHk9IjMwIiBmb250LXNpemU9IjE1IiBmb250LXdlaWdodD0iNjAwIj7lkITniYjmnKzml7blu7bmvJTov5vvvIhiZjE277yMaGlkZGVuPTcxNjjvvIxOUFVHcmFwaO+8iTwvdGV4dD4NCg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjI0IiB5PSI0OCIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9InN0YXJ0Ij7mqKrovbQgdG9rZW5z77yIbG9n4oKC77yJ77yb57q16L205Y2V5qyh6LCD55So6ICX5pe2IMK1c++8m0AyMDQ4IOe0r+iuoSAtMjQuOCU8L3RleHQ+DQo8bGluZSBjbGFzcz0iZ3JpZCIgeDE9IjY0IiB5MT0iMzUwLjUiIHgyPSI4MDAiIHkyPSIzNTAuNSIvPg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNTYiIHk9IjM1NC41Mzg0NjE1Mzg0NjE1NSIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+NTA8L3RleHQ+DQo8bGluZSBjbGFzcz0iZ3JpZCIgeDE9IjY0IiB5MT0iMjg3LjEiIHgyPSI4MDAiIHkyPSIyODcuMSIvPg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNTYiIHk9IjI5MS4wNzY5MjMwNzY5MjMxIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0iZW5kIj4xMDA8L3RleHQ+DQo8bGluZSBjbGFzcz0iZ3JpZCIgeDE9IjY0IiB5MT0iMjIzLjYiIHgyPSI4MDAiIHkyPSIyMjMuNiIvPg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNTYiIHk9IjIyNy42MTUzODQ2MTUzODQ2NCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+MTUwPC90ZXh0Pg0KPGxpbmUgY2xhc3M9ImdyaWQiIHgxPSI2NCIgeTE9IjE2MC4yIiB4Mj0iODAwIiB5Mj0iMTYwLjIiLz4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjU2IiB5PSIxNjQuMTUzODQ2MTUzODQ2MTMiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJlbmQiPjIwMDwvdGV4dD4NCjxsaW5lIGNsYXNzPSJncmlkIiB4MT0iNjQiIHkxPSI5Ni43IiB4Mj0iODAwIiB5Mj0iOTYuNyIvPg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNTYiIHk9IjEwMC42OTIzMDc2OTIzMDc2OCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+MjUwPC90ZXh0Pg0KPGxpbmUgY2xhc3M9ImJsaW5lIiB4MT0iNjQiIHkxPSI0MTQiIHgyPSI4MDAiIHkyPSI0MTQiLz4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjY0LjAiIHk9IjQzMiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjE4MC4wIiB5PSI0MzIiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjQ8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSIyOTYuMCIgeT0iNDMyIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xNjwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjQxMi4wIiB5PSI0MzIiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjY0PC90ZXh0Pg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNDcwLjAiIHk9IjQzMiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTI4PC90ZXh0Pg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNTg2LjAiIHk9IjQzMiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NTEyPC90ZXh0Pg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNjQ0LjAiIHk9IjQzMiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTAyNDwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjcwMi4wIiB5PSI0MzIiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjIwNDg8L3RleHQ+DQo8dGV4dCBjbGFzcz0ibXV0IiB4PSI3NjAuMCIgeT0iNDMyIiBmb250LXNpemU9IjExIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj40MDk2PC90ZXh0Pg0KPHRleHQgY2xhc3M9Im11dCIgeD0iNDMyIiB5PSI0NTQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnRva2VuczwvdGV4dD4NCjx0ZXh0IGNsYXNzPSJtdXQiIHg9IjU2IiB5PSI3OCIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9ImVuZCI+wrVzPC90ZXh0Pg0KPHBvbHlsaW5lIGNsYXNzPSJzMSIgcG9pbnRzPSI2NC4wLDQwOS43IDE4MC4wLDQwOS4zIDI5Ni4wLDQwNy4yIDQxMi4wLDQwMS4yIDQ3MC4wLDM5Ni4zIDU4Ni4wLDM3MS45IDY0NC4wLDMzOS4xIDcwMi4wLDI2Mi40IDc2MC4wLDk1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+DQo8cG9seWxpbmUgY2xhc3M9InMyIiBwb2ludHM9IjY0LjAsNDA5LjYgMTgwLjAsNDA5LjIgMjk2LjAsNDA3LjIgNDEyLjAsNDAxLjcgNDcwLjAsMzk3LjAgNTg2LjAsMzc0LjkgNjQ0LjAsMzQ1LjIgNzAyLjAsMjc1LjIgNzYwLjAsMTIwLjYiIGZpbGw9Im5vbmUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+DQo8cG9seWxpbmUgY2xhc3M9InMzIiBwb2ludHM9IjY0LjAsNDA5LjYgMTgwLjAsNDA5LjEgMjk2LjAsNDA3LjIgNDEyLjAsNDAxLjIgNDcwLjAsMzk2LjcgNTg2LjAsMzc3LjkgNjQ0LjAsMzUzLjIgNzAyLjAsMzA0LjAgNzYwLjAsMTg0LjgiIGZpbGw9Im5vbmUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+DQo8cG9seWxpbmUgY2xhc3M9InM0IiBwb2ludHM9IjY0LjAsNDA5LjggMTgwLjAsNDA5LjMgMjk2LjAsNDA3LjIgNDEyLjAsNDAxLjIgNDcwLjAsMzk3LjQgNTg2LjAsMzc4LjggNjQ0LjAsMzU0LjMgNzAyLjAsMzA0LjkgNzYwLjAsMTg1LjIiIGZpbGw9Im5vbmUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+DQo8cG9seWxpbmUgY2xhc3M9InM1IiBwb2ludHM9IjY0LjAsNDA5LjYgMTgwLjAsNDA5LjEgMjk2LjAsNDA2LjggNDEyLjAsNDAwLjMgNDcwLjAsMzk2LjMgNTg2LjAsMzc2LjcgNjQ0LjAsMzUxLjIgNzAyLjAsMzAwLjAgNzYwLjAsMTgwLjkiIGZpbGw9Im5vbmUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMSByaW5nIiBjeD0iNjQuMCIgY3k9IjQwOS43IiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMxIHJpbmciIGN4PSIxODAuMCIgY3k9IjQwOS4zIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMxIHJpbmciIGN4PSIyOTYuMCIgY3k9IjQwNy4yIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMxIHJpbmciIGN4PSI0MTIuMCIgY3k9IjQwMS4yIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMxIHJpbmciIGN4PSI0NzAuMCIgY3k9IjM5Ni4zIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMxIHJpbmciIGN4PSI1ODYuMCIgY3k9IjM3MS45IiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMxIHJpbmciIGN4PSI2NDQuMCIgY3k9IjMzOS4xIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMxIHJpbmciIGN4PSI3MDIuMCIgY3k9IjI2Mi40IiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMxIHJpbmciIGN4PSI3NjAuMCIgY3k9Ijk1LjYiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczIgcmluZyIgY3g9IjY0LjAiIGN5PSI0MDkuNiIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMiByaW5nIiBjeD0iMTgwLjAiIGN5PSI0MDkuMiIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMiByaW5nIiBjeD0iMjk2LjAiIGN5PSI0MDcuMiIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMiByaW5nIiBjeD0iNDEyLjAiIGN5PSI0MDEuNyIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMiByaW5nIiBjeD0iNDcwLjAiIGN5PSIzOTcuMCIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMiByaW5nIiBjeD0iNTg2LjAiIGN5PSIzNzQuOSIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMiByaW5nIiBjeD0iNjQ0LjAiIGN5PSIzNDUuMiIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMiByaW5nIiBjeD0iNzAyLjAiIGN5PSIyNzUuMiIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMiByaW5nIiBjeD0iNzYwLjAiIGN5PSIxMjAuNiIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzMyByaW5nIiBjeD0iNjQuMCIgY3k9IjQwOS42IiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMzIHJpbmciIGN4PSIxODAuMCIgY3k9IjQwOS4xIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMzIHJpbmciIGN4PSIyOTYuMCIgY3k9IjQwNy4yIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMzIHJpbmciIGN4PSI0MTIuMCIgY3k9IjQwMS4yIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMzIHJpbmciIGN4PSI0NzAuMCIgY3k9IjM5Ni43IiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMzIHJpbmciIGN4PSI1ODYuMCIgY3k9IjM3Ny45IiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMzIHJpbmciIGN4PSI2NDQuMCIgY3k9IjM1My4yIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMzIHJpbmciIGN4PSI3MDIuMCIgY3k9IjMwNC4wIiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InMzIHJpbmciIGN4PSI3NjAuMCIgY3k9IjE4NC44IiByPSI0IiBzdHJva2Utd2lkdGg9IjIiLz4NCjxjaXJjbGUgY2xhc3M9InM0IHJpbmciIGN4PSI2NC4wIiBjeT0iNDA5LjgiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczQgcmluZyIgY3g9IjE4MC4wIiBjeT0iNDA5LjMiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczQgcmluZyIgY3g9IjI5Ni4wIiBjeT0iNDA3LjIiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczQgcmluZyIgY3g9IjQxMi4wIiBjeT0iNDAxLjIiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczQgcmluZyIgY3g9IjQ3MC4wIiBjeT0iMzk3LjQiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczQgcmluZyIgY3g9IjU4Ni4wIiBjeT0iMzc4LjgiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczQgcmluZyIgY3g9IjY0NC4wIiBjeT0iMzU0LjMiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczQgcmluZyIgY3g9IjcwMi4wIiBjeT0iMzA0LjkiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczQgcmluZyIgY3g9Ijc2MC4wIiBjeT0iMTg1LjIiIHI9IjQiIHN0cm9rZS13aWR0aD0iMiIvPg0KPGNpcmNsZSBjbGFzcz0iczUgcmluZyIgY3g9IjY0LjAiIGN5PSI0MDkuNiIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzNSByaW5nIiBjeD0iMTgwLjAiIGN5PSI0MDkuMSIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzNSByaW5nIiBjeD0iMjk2LjAiIGN5PSI0MDYuOCIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzNSByaW5nIiBjeD0iNDEyLjAiIGN5PSI0MDAuMyIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzNSByaW5nIiBjeD0iNDcwLjAiIGN5PSIzOTYuMyIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzNSByaW5nIiBjeD0iNTg2LjAiIGN5PSIzNzYuNyIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzNSByaW5nIiBjeD0iNjQ0LjAiIGN5PSIzNTEuMiIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzNSByaW5nIiBjeD0iNzAyLjAiIGN5PSIzMDAuMCIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8Y2lyY2xlIGNsYXNzPSJzNSByaW5nIiBjeD0iNzYwLjAiIGN5PSIxODAuOSIgcj0iNCIgc3Ryb2tlLXdpZHRoPSIyIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iODA2IiB5PSI5OS41NjI2OTIzMDc2OTIzMiIgZm9udC1zaXplPSIxMSIgdGV4dC1hbmNob3I9InN0YXJ0Ij7ln7rnur8gMjUwLjk8L3RleHQ+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iODA2IiB5PSIxODQuOTA1NzY5MjMwNzY5MjQiIGZvbnQtc2l6ZT0iMTEiIHRleHQtYW5jaG9yPSJzdGFydCI+57uI5YC8IDE4My43PC90ZXh0Pg0KPGxpbmUgY2xhc3M9InMxIiB4MT0iNjQiIHkxPSI3MiIgeDI9Ijg2IiB5Mj0iNzIiIHN0cm9rZS13aWR0aD0iMyIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjkyIiB5PSI3NiIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9InN0YXJ0Ij7ln7rnur88L3RleHQ+DQo8bGluZSBjbGFzcz0iczIiIHgxPSIxNDAiIHkxPSI3MiIgeDI9IjE2MiIgeTI9IjcyIiBzdHJva2Utd2lkdGg9IjMiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSIxNjgiIHk9Ijc2IiBmb250LXNpemU9IjEyIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuesrOS4gOi9rjwvdGV4dD4NCjxsaW5lIGNsYXNzPSJzMyIgeDE9IjIyOSIgeTE9IjcyIiB4Mj0iMjUxIiB5Mj0iNzIiIHN0cm9rZS13aWR0aD0iMyIvPg0KPHRleHQgY2xhc3M9ImluazIiIHg9IjI1NyIgeT0iNzYiIGZvbnQtc2l6ZT0iMTIiIHRleHQtYW5jaG9yPSJzdGFydCI+56ys5LqM6L2uPC90ZXh0Pg0KPGxpbmUgY2xhc3M9InM0IiB4MT0iMzE4IiB5MT0iNzIiIHgyPSIzNDAiIHkyPSI3MiIgc3Ryb2tlLXdpZHRoPSIzIi8+DQo8dGV4dCBjbGFzcz0iaW5rMiIgeD0iMzQ2IiB5PSI3NiIgZm9udC1zaXplPSIxMiIgdGV4dC1hbmNob3I9InN0YXJ0Ij7nrKzkuInova48L3RleHQ+DQo8bGluZSBjbGFzcz0iczUiIHgxPSI0MDciIHkxPSI3MiIgeDI9IjQyOSIgeTI9IjcyIiBzdHJva2Utd2lkdGg9IjMiLz4NCjx0ZXh0IGNsYXNzPSJpbmsyIiB4PSI0MzUiIHk9Ijc2IiBmb250LXNpemU9IjEyIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPuajgOinhuS/ruWkjeWQjjwvdGV4dD4NCjwvc3ZnPg0K" alt="各版本时延演进"><figcaption>图 5 · 各版本时延演进</figcaption></figure>
+<p>fp16（MULTI_N 折叠保留）：@2048 63.0→60.4µs（-4.1%）。vs unfused ref：bf16 @2048 快 29%（基线仅快 6.5%）。</p>
+<p><strong>最终状态</strong>（msprof，2048×7168 bf16，40 核均值，墙钟 89.4µs）：vec busy 77.4µs，<code>aiv_vec_ratio</code> 的核间均值为 89.3%（各核 AIV 活跃时间口径），vec busy 均值占任务墙钟约 86.6%；scalar_wait 1.86µs，占墙钟约 2.1%。MTE2/MTE3 与向量计算大部分重叠（各 pipe 统计时间非互斥占比）。§4.3 的三线并行度 2.87 来自另一组 TimelineDetail 采集，不与本组 PipeUtilization 读数合并。</p>
+<p class="lead-in"><strong>关键路径分解</strong>（2048×7168 bf16，十进制单位）：</p>
+<table><colgroup><col style="width:26%"><col style="width:18%"><col style="width:56%"></colgroup>
+<thead>
+<tr>
+<th>项</th>
+<th align="right">值</th>
+<th>推导</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>主张量搬运量</td>
+<td align="right">117.4 MB</td>
+<td>读 x1+x2 + 写 x+y = 4 × 2048×7168×2B = 117.4 MB；近似忽略 rstd 及每核 γ/β 装载</td>
+</tr>
+<tr>
+<td>理想 HBM 时间下限</td>
+<td align="right">73.4 µs</td>
+<td>主张量 117.4 MB ÷ 名义峰值 1.6 TB/s（设备规格值，非实测；不含上述小项）</td>
+</tr>
+<tr>
+<td>实测向量占用</td>
+<td align="right">77.4 µs</td>
+<td>msprof vec busy（占墙钟 86.6%）；是当前实现的实测占用，不是理论下限</td>
+</tr>
+<tr>
+<td>实际墙钟</td>
+<td align="right">89.4 µs</td>
+<td>重叠后的关键路径</td>
+</tr>
+</tbody></table>
+<p>按主张量字节量估算，有效带宽 = 117.4 MB ÷ 89.4 µs ≈ <strong>1.31 TB/s</strong>（十进制），为名义峰值的 ~82%；结合向量占用，提示当前实现接近带宽/向量流水转折区，但不能据此认定带宽是唯一瓶颈。墙钟与理想 HBM 时间下限的差占墙钟 <strong>17.9%</strong>（89.4 − 73.4 = 16.0µs）；墙钟与实测向量占用的差占墙钟 <strong>13.4%</strong>（89.4 − 77.4 = 12.0µs），后者不是理论优化空间。ramp/尾行排空、装载/落盘非完美重叠及 DataCopyPad 短粒度是待量化的候选来源，尚不能拆分归因。</p>
+<p>R5 只说明：<strong>本轮 reduce 拆链方案未带来可测的向量占用或墙钟改善</strong>，并未证明硬件依赖延迟为零，也不能推广为所有 V 指令削减都无效。后续应按新的 profiling 证据选择优化点；decode 的 γ/β 并行预取是候选方向，收益尚未验证。</p>
+<p class="lead-in"><strong>decode 与 prefill 分列</strong>（量级与机制不同，不共用一张纵轴）：</p>
+<table><colgroup><col style="width:22%"><col style="width:23%"><col style="width:33%"><col style="width:22%"></colgroup>
+<thead>
+<tr>
+<th>档位</th>
+<th>机制</th>
+<th>基线 → 终值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>decode 1/4/16 tok（SINGLE_N）</td>
+<td>发射+延迟混合瓶颈</td>
+<td>3.36→3.46 / 3.70→3.87 / 5.32→5.69</td>
+<td>µs 级噪声带内；剩余候选=γ/β 装载并行预取（§4.4③ 的 SINGLE_N 部分）</td>
+</tr>
+<tr>
+<td>prefill 512-4096 tok（NORMAL/MULTI_N）</td>
+<td>带宽+向量流水</td>
+<td>上表</td>
+<td>本报告主体</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="section-25">5. 归因速查表与关键经验</h2>
+<h3 id="section-26">5.1 归因速查表</h3>
+<p>（本项目实际走过的归因路径；&quot;看什么&quot;是 msprof 字段、tiling 日志或代码检视点）</p>
+<table><colgroup><col style="width:23%"><col style="width:27%"><col style="width:50%"></colgroup>
+<thead>
+<tr>
+<th>症状 / 问题</th>
+<th>看什么</th>
+<th>本例读数 → 结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>不确定优化对象是否命中</td>
+<td><code>ASCEND_GLOBAL_LOG_LEVEL=1</code> 采 tiling 日志的 key/ub_factor</td>
+<td>简报说 SPLIT_D，实测 key 30=NORMAL → 重定优化对象</td>
+</tr>
+<tr>
+<td>scalar_wait 占比异常高</td>
+<td><code>aiv_scalar_wait_time / wall</code></td>
+<td>85% → 发射线程被标量往返+单缓冲串行钉死，先消往返再行间流水</td>
+</tr>
+<tr>
+<td>vec busy 不饱和 + scalar_wait 高</td>
+<td>双指标并列读（注明分母）</td>
+<td>基线墙钟占比约 70.7% + 85.2% → 减 pass 与流水均有必要；两个指标非互斥占比</td>
+</tr>
+<tr>
+<td>收益是真还是噪声</td>
+<td><strong>未动路径作金丝雀</strong>，同 shape、同轮对照并独立复测</td>
+<td>第一、二轮以未改 fp16 路径估计噪声，收益判定以 ≥512 档为准；128 档 ±1.2µs 属噪声带，不直接比较不同 shape 的波动百分比</td>
+</tr>
+<tr>
+<td>数字看着对但不敢信</td>
+<td>精度测试与边界覆盖</td>
+<td>补充行间对比、极值、尾块及 UB 边界；精度测试通过</td>
+</tr>
+<tr>
+<td>大 shape 收益到顶了？</td>
+<td>主张量字节 ÷ 墙钟 vs HBM 峰值</td>
+<td>117.4MB/89.4µs ≈ 1.31TB/s，约为名义峰值的 82%；与理想 HBM 时间差约占墙钟 18%，不等于已证明可兑现的收益</td>
+</tr>
+<tr>
+<td>&quot;合理&quot;的优化上板无效</td>
+<td>实测占用与墙钟对照</td>
+<td>本轮 reduce 拆链未观测到明显改善；机理解释待验证，负结果留档</td>
+</tr>
+<tr>
+<td>测试结果离奇（超时/崩溃）</td>
+<td><code>/proc/loadavg</code>、设备日志</td>
+<td>共享宿主 loadavg 200+（192 核）→ CPU 饥饿，结果不可信，先排环境</td>
+</tr>
+</tbody></table>
+<h3 id="section-27">5.2 关键经验</h3>
+<ol>
+<li><strong>先实证分发，再动手</strong>：多变体算子的第一件事是用 tiling 日志钉死每个生产 shape 命中的变体与参数（key、ub_factor、block_factor）。本例简报的变体归属是错的——按简报优化将获得精确的零收益；</li>
+<li><strong>本例优先处理发射线程停等</strong>：基线的逐行 V/S 往返与串行队列是重点排查项；scalar_wait 是停等观测指标，但不能仅凭该字段定位到某一种等待。消除标量往返（Gather+stride-0 广播、rstd 全程 V 域）并建立行间流水后，停等显著减少，减 pass 的收益也更容易兑现；</li>
+<li><strong>bf16 的 pass 下限先算清</strong>：c220 无 bf16 元级乘加 → 所有数学在 fp32 域，加宽/舍入/再宽都是语义必需。可削减的只有&quot;重复计算&quot;（每行重做的 cast、reduce 前的全宽 1/N）；把语义 pass 数数清楚，才知道优化空间还剩多少；</li>
+<li><strong>未动路径是噪声对照</strong>：在同设备、同 shape、同轮设置下，代码未变路径的波动可辅助估计环境噪声；收益判断还应结合目标路径的独立复测，不能用某个小 shape 的 ±10% 波动直接裁定另一档位的收益；</li>
+<li><strong>精度验证是性能优化的前提</strong>：新增测试覆盖行间对比、极值输入、尾块与 UB 边界，精度测试通过。每次改变数值路径或缓冲布局，应先完成对应回归，再评价性能收益；</li>
+<li><strong>UB 预算与 tiling 必须成本模型化</strong>：常量 ubFactor 往往是&quot;按最坏列宽 × 每列字节&quot;的全宽安全设计；一旦按 numCol 收紧，缓冲总量就随 shape 比例增长——host 侧必须按 dtype/β 的每列成本 + 固定开销核算，超限回退到已验证路径（并保证回退配置本身落在被验证过的参数域内——本例 colTileNum=1 即回退引入的新雷）；</li>
+<li><strong>溢出域也是契约</strong>：数学等价变换仍可能改变舍入路径或溢出域；前者需按算子契约验证，后者必须回退或给出有界证明（fp16 的 max raw sum 远离 fp32 上限，故折叠保留）；</li>
+<li><strong>实测结果与机理解释分开留档</strong>：本轮 reduce 依赖链重构收益为噪声级，内部 repeat 机制尚未验证；dst==src1 的交错配置发生 fault、改放 src0 后通过，是当前 c220 配置的设备观测，不应外推为所有配置的硬件规律。负结果同样保留，避免重复投入；</li>
+<li><strong>环境先于归因</strong>：共享宿主机 loadavg 飙到 200+ 时，测试超时、vector core 异常、离谱波动都可能是 CPU 饥饿的产物——<code>/proc/loadavg</code> 一条命令先排除环境，再怀疑 kernel。</li>
+</ol>
+</main>
+  </div>
+</body>
+</html>
