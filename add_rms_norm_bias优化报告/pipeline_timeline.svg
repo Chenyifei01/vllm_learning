@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="510" viewBox="0 0 900 510" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
   <title id="title">行间流水示意</title>
-  <desc id="desc">对比单核处理多行数据时的串行流程与流水流程。优化后，下一行装载与当前行向量计算重叠，当前行落盘与下一行计算重叠。</desc>
+  <desc id="desc">对比单核处理多行数据时的串行流程与流水流程。优化后，下一行装载与当前行向量计算重叠，当前行落盘与下一行计算重叠；装载 i+2 复用行 i 的槽位，须等落盘 i 完成后才能开始。</desc>
   <style>
     .surf { fill: #fcfcfb; }
     .ink { fill: #0b0b0b; }
@@ -69,8 +69,10 @@
   <text class="onbar" x="172" y="324" font-size="11" text-anchor="middle">装载 i</text>
   <rect class="load" x="204" y="306" width="64" height="28" rx="3"/>
   <text class="onbar" x="236" y="324" font-size="11" text-anchor="middle">装载 i+1</text>
-  <rect class="load" x="418" y="306" width="64" height="28" rx="3"/>
-  <text class="onbar" x="450" y="324" font-size="11" text-anchor="middle">装载 i+2</text>
+  <rect class="wait" x="272" y="306" width="220" height="28" rx="3"/>
+  <text class="mut" x="382" y="324" font-size="10" text-anchor="middle">装载 i+2 等落盘 i 释放槽位（MTE3_MTE2）</text>
+  <rect class="load" x="496" y="306" width="64" height="28" rx="3"/>
+  <text class="onbar" x="528" y="324" font-size="11" text-anchor="middle">装载 i+2</text>
 
   <rect class="compute" x="204" y="346" width="214" height="28" rx="3"/>
   <text class="onbar" x="311" y="364" font-size="11" text-anchor="middle">计算 i</text>
