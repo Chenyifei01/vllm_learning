@@ -14,7 +14,7 @@
   </style>
   <rect class="surf" x="0" y="0" width="880" height="420"/>
   <text class="ink" x="24" y="30" font-size="15" font-weight="600">瓶颈归因：msprof 管线对比（@2048×4096，核均值）</text>
-  <text class="ink2" x="24" y="48" font-size="12">各 pipe busy 时间可重叠（非互斥占比）。vec 仍是主占用者（75% 墙钟），未触 HBM 墙</text>
+  <text class="ink2" x="24" y="48" font-size="12">各 pipe busy 时间可重叠（非互斥占比）。vec 是主占用者（约为墙钟的 75%）</text>
 
   <!-- y: 0..60us -> y=340..70, 4.5 px/us -->
   <line class="grid" x1="90" y1="340.5" x2="820" y2="340.5"/>
@@ -69,5 +69,5 @@
     <rect class="s3" x="600" y="84" width="12" height="12" rx="2"/>
     <text class="ink2" x="618" y="95" font-size="12">最终（blockDim 40）</text>
   </g>
-  <text class="mut" x="24" y="398" font-size="10.5">有效带宽 639 → 779 GB/s（名义峰值 1.6TB/s 的 40% → 49%）；vec/wall 80.1% → 75.1%。剩余 ~12µs 非 vec 缺口为每 tile 队列编排（~0.37µs × 13 tile）+ ramp/尾排空。</text>
+  <text class="mut" x="24" y="398" font-size="10.5">有效带宽 639 → 779 GB/s（名义峰值约 40% → 49%）；vec/wall 80.1% → 75.1%。wall 与 vec busy 差约 12µs，来源仍需隔离测量。</text>
 </svg>
