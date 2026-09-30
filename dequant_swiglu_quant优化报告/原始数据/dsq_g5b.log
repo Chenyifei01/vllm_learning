@@ -1,0 +1,9 @@
+[W929 13:21:18.191544423 FunctionLoader.cpp:48] Warning: LD_PRELOAD detected, FunctionLoader prefers RTLD_DEFAULT for symbol resolution. (function operator())
+INFO 09-29 13:21:24 [__init__.py:52] Available plugins for group vllm.platform_plugins:
+INFO 09-29 13:21:24 [__init__.py:54] - ascend -> vllm_ascend:register
+INFO 09-29 13:21:24 [__init__.py:57] All plugins in this group will be loaded. Set `VLLM_PLUGINS` to control which plugins to load.
+INFO 09-29 13:21:24 [__init__.py:272] Platform plugin ascend is activated
+INFO 09-29 13:21:24 [platform.py:71] Breakable CUDAGraph on Ascend is opt-in; using VLLM_USE_BREAKABLE_CUDAGRAPH=0.
+[W929 13:21:25.762803198 NPUCachingAllocator.cpp:202] Warning: The current CANN and HDK(driver) versions require processing for 32 padding size, with memory allocation. (function operator())
+{"op": "dequant_swiglu_quant", "path": "group", "swiglu_mode": 0, "clamp_limit": 0.0, "groups": 64, "x_last_dim": 4096, "tokens": 512, "us": 23.064, "ref_us": 75.027}
+{"op": "dequant_swiglu_quant", "path": "group", "swiglu_mode": 0, "clamp_limit": 0.0, "groups": 64, "x_last_dim": 4096, "tokens": 2048, "us": 79.965, "ref_us": 154.54}

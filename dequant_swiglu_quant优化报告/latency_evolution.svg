@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="470" viewBox="0 0 880 470" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+  <title id="title">各版本时延演进</title>
+  <desc id="desc">DeepSeek 共享专家主路径（2H=4096，swiglu_mode=1）的 NPUGraph 测量结果。2048 tokens 由基线 57.1µs 降至最终 47.0µs（-17.6%），4096 tokens 由 106.0µs 降至 84.7µs（-20.1%）。</desc>
+  <style>
+    .surf { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .mut { fill: #898781; }
+    .grid { stroke: #e1e0d9; stroke-width: 1; } .bline { stroke: #c3c2b7; stroke-width: 1; }
+    .s1 { fill: #2a78d6; stroke: #2a78d6; } .s3 { fill: #1baf7a; stroke: #1baf7a; } .s4 { fill: #eda100; stroke: #eda100; }
+    text { font-family: 'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Segoe UI',Arial,sans-serif; }
+    polyline { fill: none !important; }
+    @media (prefers-color-scheme: dark) {
+      .surf { fill: #1a1a19; } .ink { fill: #ffffff; } .ink2 { fill: #c3c2b7; } .mut { fill: #898781; }
+      .grid { stroke: #2c2c2a; } .bline { stroke: #383835; }
+      .s1 { fill: #3987e5; stroke: #3987e5; } .s3 { fill: #199e70; stroke: #199e70; } .s4 { fill: #c98500; stroke: #c98500; }
+    }
+  </style>
+  <rect class="surf" x="0" y="0" width="880" height="460"/>
+  <text class="ink" x="24" y="30" font-size="15" font-weight="600">各版本时延演进（共享专家主路径，2H=4096，NPUGraph）</text>
+  <text class="ink2" x="24" y="48" font-size="12" text-anchor="start">横轴 tokens（log₂）；纵轴单次调用耗时 µs；@2048 累计 -17.6%、@4096 累计 -20.1%</text>
+
+  <line class="grid" x1="80" y1="350.5" x2="800" y2="350.5"/>
+  <text class="mut" x="72" y="354.5" font-size="11" text-anchor="end">0</text>
+  <line class="grid" x1="80" y1="297.7" x2="800" y2="297.7"/>
+  <text class="mut" x="72" y="301.7" font-size="11" text-anchor="end">20</text>
+  <line class="grid" x1="80" y1="245.0" x2="800" y2="245.0"/>
+  <text class="mut" x="72" y="249.0" font-size="11" text-anchor="end">40</text>
+  <line class="grid" x1="80" y1="192.2" x2="800" y2="192.2"/>
+  <text class="mut" x="72" y="196.2" font-size="11" text-anchor="end">60</text>
+  <line class="grid" x1="80" y1="139.4" x2="800" y2="139.4"/>
+  <text class="mut" x="72" y="143.4" font-size="11" text-anchor="end">80</text>
+  <line class="grid" x1="80" y1="86.7" x2="800" y2="86.7"/>
+  <text class="mut" x="72" y="90.7" font-size="11" text-anchor="end">100</text>
+  <text class="mut" x="440" y="374" font-size="11" text-anchor="middle">tokens</text>
+
+  <line class="bline" x1="80" y1="60" x2="80" y2="350"/>
+  <text class="mut" x="80" y="366" font-size="11" text-anchor="middle">128</text>
+  <line class="bline" x1="368" y1="60" x2="368" y2="350"/>
+  <text class="mut" x="368" y="366" font-size="11" text-anchor="middle">512</text>
+  <line class="bline" x1="512" y1="60" x2="512" y2="350"/>
+  <text class="mut" x="512" y="366" font-size="11" text-anchor="middle">1024</text>
+  <line class="bline" x1="656" y1="60" x2="656" y2="350"/>
+  <text class="mut" x="656" y="366" font-size="11" text-anchor="middle">2048</text>
+  <line class="bline" x1="800" y1="60" x2="800" y2="350"/>
+  <text class="mut" x="800" y="366" font-size="11" text-anchor="middle">4096</text>
+
+  <!-- 基线 -->
+  <polyline class="s1" stroke-width="2" points="80,319.9 368,294.7 512,263.1 656,199.6 800,70.5"/>
+  <circle class="s1" cx="80" cy="319.9" r="4" fill-opacity="0"/>
+  <circle class="s1" cx="368" cy="294.7" r="4" fill-opacity="0"/>
+  <circle class="s1" cx="512" cy="263.1" r="4" fill-opacity="0"/>
+  <circle class="s1" cx="656" cy="199.6" r="4" fill-opacity="0"/>
+  <circle class="s1" cx="800" cy="70.5" r="4" fill-opacity="0"/>
+  <!-- +R1 等价 pass 消除 -->
+  <polyline class="s4" stroke-width="2" points="80,318.3 368,295.4 512,266.0 656,209.5 800,90.3"/>
+  <circle class="s4" cx="80" cy="318.3" r="4" fill-opacity="0"/>
+  <circle class="s4" cx="368" cy="295.4" r="4" fill-opacity="0"/>
+  <circle class="s4" cx="512" cy="266.0" r="4" fill-opacity="0"/>
+  <circle class="s4" cx="656" cy="209.5" r="4" fill-opacity="0"/>
+  <circle class="s4" cx="800" cy="90.3" r="4" fill-opacity="0"/>
+  <!-- 最终（+tiling 校真） -->
+  <polyline class="s3" stroke-width="2" points="80,322.2 368,301.6 512,276.4 656,226.1 800,126.7"/>
+  <circle class="s3" cx="80" cy="322.2" r="4" fill-opacity="0"/>
+  <circle class="s3" cx="368" cy="301.6" r="4" fill-opacity="0"/>
+  <circle class="s3" cx="512" cy="276.4" r="4" fill-opacity="0"/>
+  <circle class="s3" cx="656" cy="226.1" r="4" fill-opacity="0"/>
+  <circle class="s3" cx="800" cy="126.7" r="4" fill-opacity="0"/>
+
+  <!-- direct labels at right edge -->
+  <text class="ink2" x="806" y="74" font-size="11" text-anchor="start" font-weight="600">基线 106.0</text>
+  <text class="ink2" x="806" y="94" font-size="11" text-anchor="start" font-weight="600">R1 98.5</text>
+  <text class="ink2" x="806" y="130" font-size="11" text-anchor="start" font-weight="600">最终 84.7</text>
+  <!-- @2048 annotation -->
+  <text class="mut" x="656" y="192" font-size="11" text-anchor="middle">57.1 → 47.0</text>
+
+  <!-- legend -->
+  <g>
+    <rect class="s1" x="24" y="66" width="14" height="3" rx="1.5"/>
+    <text class="ink2" x="44" y="71" font-size="12">基线</text>
+    <rect class="s4" x="24" y="86" width="14" height="3" rx="1.5"/>
+    <text class="ink2" x="44" y="91" font-size="12">+R1 等价 pass 消除</text>
+    <rect class="s3" x="24" y="106" width="14" height="3" rx="1.5"/>
+    <text class="ink2" x="44" y="111" font-size="12">+R3 tiling 校真（最终）</text>
+  </g>
+  <text class="mut" x="24" y="440" font-size="10.5">R2（双缓冲）为负结果已回退，与基线重合不单列；R4 仅作用于 group 路径。数据：NPUGraph capture+replay，5 样本中位。</text>
+</svg>

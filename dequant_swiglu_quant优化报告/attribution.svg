@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="430" viewBox="0 0 880 430" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+  <title id="title">瓶颈归因：优化前后管线对比</title>
+  <desc id="desc">msprof PipeUtilization（2048×4096，40 核均值）。墙钟 59.1→48.5µs，vec busy 47.3→36.4µs；blockDim 36→40；有效带宽 639→779GB/s。</desc>
+  <style>
+    .surf { fill: #fcfcfb; } .ink { fill: #0b0b0b; } .ink2 { fill: #52514e; } .mut { fill: #898781; }
+    .grid { stroke: #e1e0d9; stroke-width: 1; } .bline { stroke: #c3c2b7; stroke-width: 1; }
+    .s1 { fill: #2a78d6; } .s3 { fill: #1baf7a; }
+    text { font-family: 'Microsoft YaHei','PingFang SC','Noto Sans CJK SC','Segoe UI',Arial,sans-serif; }
+    @media (prefers-color-scheme: dark) {
+      .surf { fill: #1a1a19; } .ink { fill: #ffffff; } .ink2 { fill: #c3c2b7; } .mut { fill: #898781; }
+      .grid { stroke: #2c2c2a; } .bline { stroke: #383835; }
+      .s1 { fill: #3987e5; } .s3 { fill: #199e70; }
+    }
+  </style>
+  <rect class="surf" x="0" y="0" width="880" height="420"/>
+  <text class="ink" x="24" y="30" font-size="15" font-weight="600">瓶颈归因：msprof 管线对比（@2048×4096，核均值）</text>
+  <text class="ink2" x="24" y="48" font-size="12">各 pipe busy 时间可重叠（非互斥占比）。vec 仍是主占用者（75% 墙钟），未触 HBM 墙</text>
+
+  <!-- y: 0..60us -> y=340..70, 4.5 px/us -->
+  <line class="grid" x1="90" y1="340.5" x2="820" y2="340.5"/>
+  <text class="mut" x="82" y="344.5" font-size="11" text-anchor="end">0</text>
+  <line class="grid" x1="90" y1="247.5" x2="820" y2="247.5"/>
+  <text class="mut" x="82" y="251.5" font-size="11" text-anchor="end">20</text>
+  <line class="grid" x1="90" y1="155.5" x2="820" y2="155.5"/>
+  <text class="mut" x="82" y="159.5" font-size="11" text-anchor="end">40</text>
+  <line class="grid" x1="90" y1="70.5" x2="820" y2="70.5"/>
+  <text class="mut" x="82" y="74.5" font-size="11" text-anchor="end">60 µs</text>
+
+  <!-- 5 groups: wall, vec, mte2, mte3, scalar; group width 100, bars 34+34 gap4, step 146 -->
+  <!-- wall: 59.1 / 48.5 -->
+  <rect class="s1" x="130" y="74.1" width="34" height="265.9" rx="2"/>
+  <text class="ink2" x="147" y="68" font-size="11" text-anchor="middle" font-weight="600">59.1</text>
+  <rect class="s3" x="168" y="121.8" width="34" height="218.2" rx="2"/>
+  <text class="ink2" x="185" y="116" font-size="11" text-anchor="middle" font-weight="600">48.5</text>
+  <text class="ink2" x="166" y="360" font-size="12" text-anchor="middle">墙钟</text>
+
+  <!-- vec: 47.3 / 36.4 -->
+  <rect class="s1" x="276" y="127.2" width="34" height="212.8" rx="2"/>
+  <text class="ink2" x="293" y="121" font-size="11" text-anchor="middle" font-weight="600">47.3</text>
+  <rect class="s3" x="314" y="176.2" width="34" height="163.8" rx="2"/>
+  <text class="ink2" x="331" y="170" font-size="11" text-anchor="middle" font-weight="600">36.4</text>
+  <text class="ink2" x="312" y="360" font-size="12" text-anchor="middle">vec busy</text>
+
+  <!-- mte2: 15.7 / 14.2 -->
+  <rect class="s1" x="422" y="269.4" width="34" height="70.6" rx="2"/>
+  <text class="ink2" x="439" y="263" font-size="11" text-anchor="middle" font-weight="600">15.7</text>
+  <rect class="s3" x="460" y="276.1" width="34" height="63.9" rx="2"/>
+  <text class="ink2" x="477" y="270" font-size="11" text-anchor="middle" font-weight="600">14.2</text>
+  <text class="ink2" x="458" y="360" font-size="12" text-anchor="middle">mte2 busy</text>
+
+  <!-- mte3: 5.7 / 2.0 -->
+  <rect class="s1" x="568" y="314.4" width="34" height="25.6" rx="2"/>
+  <text class="ink2" x="585" y="308" font-size="11" text-anchor="middle" font-weight="600">5.7</text>
+  <rect class="s3" x="606" y="331.0" width="34" height="9.0" rx="2"/>
+  <text class="ink2" x="623" y="325" font-size="11" text-anchor="middle" font-weight="600">2.0</text>
+  <text class="ink2" x="604" y="360" font-size="12" text-anchor="middle">mte3 busy</text>
+
+  <!-- scalar: 16.5 / 9.8 -->
+  <rect class="s1" x="714" y="265.8" width="34" height="74.2" rx="2"/>
+  <text class="ink2" x="731" y="259" font-size="11" text-anchor="middle" font-weight="600">16.5</text>
+  <rect class="s3" x="752" y="295.9" width="34" height="44.1" rx="2"/>
+  <text class="ink2" x="769" y="290" font-size="11" text-anchor="middle" font-weight="600">9.8</text>
+  <text class="ink2" x="750" y="360" font-size="12" text-anchor="middle">scalar busy</text>
+
+  <!-- legend -->
+  <g>
+    <rect class="s1" x="600" y="62" width="12" height="12" rx="2"/>
+    <text class="ink2" x="618" y="73" font-size="12">基线（blockDim 36）</text>
+    <rect class="s3" x="600" y="84" width="12" height="12" rx="2"/>
+    <text class="ink2" x="618" y="95" font-size="12">最终（blockDim 40）</text>
+  </g>
+  <text class="mut" x="24" y="398" font-size="10.5">有效带宽 639 → 779 GB/s（名义峰值 1.6TB/s 的 40% → 49%）；vec/wall 80.1% → 75.1%。剩余 ~12µs 非 vec 缺口为每 tile 队列编排（~0.37µs × 13 tile）+ ramp/尾排空。</text>
+</svg>
