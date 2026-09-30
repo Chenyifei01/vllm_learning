@@ -1,27 +1,25 @@
-# Attention 融合算子 Ascend 性能优化报告（算子 A，脱敏版）
-
-> 脱敏说明：本文以 `fused_attn_a` 代称目标算子，模型、框架分支和设备型号已泛化。代码片段为省略完整内核及参数、掩码或同步细节的机制示意，保留通用 API、算法表达和性能数据。
+# Attention 融合算子 Ascend 性能优化报告
 
 ## 1. 背景
 
 Attention 是 Transformer 架构的计算核心：大模型推理的主要算力消耗在 attention 与 FFN 的矩阵乘上，而 attention 的中间 score/probability 矩阵规模随序列长度平方增长，使其成为推理引擎中最值得优化的热点算子。为避免完整的 score/probability 反复读写显存，现代推理框架普遍采用 **FlashAttention 形式的融合实现**——K/V 分块流入片上、softmax 在线归约、概率块不落 GM。在 Ascend 这类 Cube/Vector 异构架构上，attention 进一步实现为 **Cube/Vector 混合核**：两次 GEMM 在 AIC 的 Cube 执行，scale/bias/softmax/rescale 在 AIV 的 Vector 执行，性能由两条管线的衔接质量决定。
 
-本文档以 TileLang 实验分支在 Ascend 平台上的 Attention 融合算子为对象，总结其性能优化过程。主体案例为 **`fused_attn_a`**——某视觉模型编码器中的注意力算子，在标准 FlashAttention 之外叠加 REL_H/REL_W 二维查表偏置。全文的优化经验围绕四条主线展开：修正项按数据依赖分类外提、生产者直写消费者布局、流水深度按 shape 实测、用生成代码校准成本模型。
+本文档以 TileLang 在 Ascend 平台上的 Attention 融合算子为对象，总结其性能优化过程。主体案例为视觉编码器中的二维相对位置偏置 Attention，在标准 FlashAttention 之外叠加 REL_H/REL_W 二维查表偏置。全文的优化经验围绕四条主线展开：修正项按数据依赖分类外提、生产者直写消费者布局、流水深度按 shape 实测、用生成代码校准成本模型。
 
 ### 测试环境
 
 | 项目 | 值 |
 |------|-----|
-| 设备 | Ascend 测试设备（具体型号已脱敏），36 AIC / 72 AIV，满频 1650/1650 MHz |
+| 设备 | Ascend，36 AIC / 72 AIV，满频 1650/1650 MHz |
 | CANN | 9.1.0 |
-| TileLang | TileLang（实验分支） |
+| TileLang | TileLang |
 | 测试矩阵 | `(batch, side) = (2,14)/(1,40)/(1,64)`，`heads=12`，`D=64` |
 | 序列长度 | S = side² = 196 / 1600 / 4096 |
 | 数据类型 | bfloat16 输入，FP32 累加，概率 BF16 |
 
 ### 算子功能
 
-`fused_attn_a`：对每个 `(batch, head)` 的查询块计算 score = QKᵀ/sqrt(D) → 叠加二维分解式相对位置偏置（key 下标映射为 `(j//side, j%side)`，从 REL_H/REL_W 两张表取数相加）→ 在线 softmax → 加权求和 PV → 除以行和、转 BF16 写回。
+二维相对位置偏置 Attention：对每个 `(batch, head)` 的查询块计算 score = QKᵀ/sqrt(D) → 叠加二维分解式相对位置偏置（key 下标映射为 `(j//side, j%side)`，从 REL_H/REL_W 两张表取数相加）→ 在线 softmax → 加权求和 PV → 除以行和、转 BF16 写回。
 
 ```text
 score[i,j] = Q[i]·K[j]/sqrt(D) + REL_H[i, j//side] + REL_W[i, j%side]
