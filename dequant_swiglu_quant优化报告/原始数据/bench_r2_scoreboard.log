@@ -1,0 +1,15 @@
+[W929 11:46:31.747174329 FunctionLoader.cpp:48] Warning: LD_PRELOAD detected, FunctionLoader prefers RTLD_DEFAULT for symbol resolution. (function operator())
+INFO 09-29 11:46:42 [__init__.py:52] Available plugins for group vllm.platform_plugins:
+INFO 09-29 11:46:42 [__init__.py:54] - ascend -> vllm_ascend:register
+INFO 09-29 11:46:42 [__init__.py:57] All plugins in this group will be loaded. Set `VLLM_PLUGINS` to control which plugins to load.
+INFO 09-29 11:46:42 [__init__.py:272] Platform plugin ascend is activated
+INFO 09-29 11:46:42 [platform.py:71] Breakable CUDAGraph on Ascend is opt-in; using VLLM_USE_BREAKABLE_CUDAGRAPH=0.
+[W929 11:46:44.068782971 NPUCachingAllocator.cpp:202] Warning: The current CANN and HDK(driver) versions require processing for 32 padding size, with memory allocation. (function operator())
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 512, "us": 20.691, "ref_us": 85.86}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 1024, "us": 31.761, "ref_us": 108.299}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 2048, "us": 53.851, "ref_us": 153.201}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 4096, "us": 98.734, "ref_us": 355.057}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 512, "us": 15.132, "ref_us": 63.357}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 1024, "us": 21.156, "ref_us": 86.346}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 2048, "us": 33.142, "ref_us": 107.882}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 4096, "us": 57.091, "ref_us": 154.228}

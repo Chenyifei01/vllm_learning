@@ -1,0 +1,43 @@
+[W929 11:13:35.922684945 FunctionLoader.cpp:48] Warning: LD_PRELOAD detected, FunctionLoader prefers RTLD_DEFAULT for symbol resolution. (function operator())
+INFO 09-29 11:13:42 [__init__.py:52] Available plugins for group vllm.platform_plugins:
+INFO 09-29 11:13:42 [__init__.py:54] - ascend -> vllm_ascend:register
+INFO 09-29 11:13:42 [__init__.py:57] All plugins in this group will be loaded. Set `VLLM_PLUGINS` to control which plugins to load.
+INFO 09-29 11:13:42 [__init__.py:272] Platform plugin ascend is activated
+INFO 09-29 11:13:42 [platform.py:71] Breakable CUDAGraph on Ascend is opt-in; using VLLM_USE_BREAKABLE_CUDAGRAPH=0.
+[W929 11:13:51.475939510 NPUCachingAllocator.cpp:202] Warning: The current CANN and HDK(driver) versions require processing for 32 padding size, with memory allocation. (function operator())
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 1, "us": 3.502, "ref_us": 9.058}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 4, "us": 3.938, "ref_us": 19.668}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 16, "us": 4.558, "ref_us": 30.98}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 64, "us": 9.163, "ref_us": 51.687}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 128, "us": 12.005, "ref_us": 55.613}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 512, "us": 20.716, "ref_us": 86.836}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 1024, "us": 31.86, "ref_us": 107.117}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 2048, "us": 53.325, "ref_us": 153.524}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 4096, "tokens": 4096, "us": 98.461, "ref_us": 354.491}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 1, "us": 3.529, "ref_us": 7.031}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 4, "us": 4.096, "ref_us": 16.748}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 16, "us": 4.23, "ref_us": 21.776}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 64, "us": 6.157, "ref_us": 46.512}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 128, "us": 8.283, "ref_us": 51.206}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 512, "us": 14.0, "ref_us": 63.126}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 1024, "us": 20.869, "ref_us": 86.313}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 2048, "us": 32.582, "ref_us": 108.826}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 2048, "tokens": 4096, "us": 56.353, "ref_us": 153.864}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 1024, "tokens": 1, "us": 3.536, "ref_us": 7.815}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 1024, "tokens": 4, "us": 3.54, "ref_us": 16.237}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 1024, "tokens": 16, "us": 4.096, "ref_us": 18.254}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 1024, "tokens": 64, "us": 5.234, "ref_us": 40.637}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 1024, "tokens": 128, "us": 6.329, "ref_us": 48.234}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 1024, "tokens": 512, "us": 12.135, "ref_us": 56.743}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 1024, "tokens": 1024, "us": 14.244, "ref_us": 62.86}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 1024, "tokens": 2048, "us": 20.05, "ref_us": 86.72}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 1024, "tokens": 4096, "us": 33.411, "ref_us": 109.975}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 512, "tokens": 1, "us": 3.557, "ref_us": 7.729}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 512, "tokens": 4, "us": 3.554, "ref_us": 16.088}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 512, "tokens": 16, "us": 4.369, "ref_us": 17.306}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 512, "tokens": 64, "us": 4.794, "ref_us": 23.371}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 512, "tokens": 128, "us": 5.229, "ref_us": 40.583}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 512, "tokens": 512, "us": 8.489, "ref_us": 54.234}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 512, "tokens": 1024, "us": 12.153, "ref_us": 60.274}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 512, "tokens": 2048, "us": 15.194, "ref_us": 64.337}
+{"op": "dequant_swiglu_quant", "path": "nogroup", "swiglu_mode": 1, "clamp_limit": 0.0, "groups": null, "x_last_dim": 512, "tokens": 4096, "us": 20.433, "ref_us": 87.568}
