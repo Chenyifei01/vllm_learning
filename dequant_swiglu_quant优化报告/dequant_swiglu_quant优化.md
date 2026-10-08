@@ -27,8 +27,7 @@ scale = max|swiglu行| / 127 (fp32)
 y     = int8( RINT(swiglu/scale) 经 half 中转 TRUNC )              # 动态量化
 ```
 
-数值链 fp32 → RINT → int32 → half(ROUND, deq 1.0) → int8(TRUNC)；half 中转对
-[-127,127] 的整数值无损。
+数值链 fp32 → RINT → int32 → half(ROUND, deq 1.0) → int8(TRUNC)；half 中转对[-127,127] 的整数值无损。
 
 ---
 
@@ -45,14 +44,11 @@ token embeddings
                  gmm1 → 【dequant_swiglu_quant(group_index)】（MC2/fusion 关闭时）
 ```
 
-两个调用方（`shared_experts.py`、`w8a8_dynamic.py`）的参数画像一致：x=int32、
-dynamic 量化、bias/quant_scale 均为 None——都落入 DskTiling 的能力域。
+两个调用方（`shared_experts.py`、`w8a8_dynamic.py`）的参数画像一致：x=int32、dynamic 量化、bias/quant_scale 均为 None——都落入 DskTiling 的能力域。
 
 ### 2.2 分派实证：先确认生产命中的 kernel
 
-该算子有多套 tiling 模板和 kernel 变体。静态走读给出分派条件后，
-再以 msprof `OpBasicInfo.csv` 记录的 kernel 名后缀（tiling key）核对
-两个生产调用方的实际命中情况：
+该算子有多套 tiling 模板和 kernel 变体。静态走读给出分派条件后，再以 msprof `OpBasicInfo.csv` 记录的 kernel 名后缀（tiling key）核对两个生产调用方的实际命中情况：
 
 | 调用方 | 配置 | tiling key（设备实证） | kernel |
 |---|---|---|---|
@@ -60,15 +56,9 @@ dynamic 量化、bias/quant_scale 均为 None——都落入 DskTiling 的能力
 | MoE MC2 回退 | x=int32、group_index=每组行数 | **100000000**（普通）/ **110000000**（cut：组数≥32 且均摊≤16 行） | Base / `DequantSwigluQuantGroup` |
 | 所列两个调用方未命中 | bf16/fp16 x 直入等 | 10000-30013 | 变体 kernel |
 
-**DskTiling 的能力域 = group_index 存在，或（x=int32 且 swiglu_mode=1）**——
-两个生产调用方均落在该能力域，因此本轮重点优化它们实际命中的
-`DequantSwigluQuantBase` / `DequantSwigluQuantGroup`。其他变体仍需保留
-正确性回归，不能仅凭文件新旧推断性能热点。
+**DskTiling 的能力域 = group_index 存在，或（x=int32 且 swiglu_mode=1）**——两个生产调用方均落在该能力域，因此本轮重点优化它们实际命中的`DequantSwigluQuantBase` / `DequantSwigluQuantGroup`。其他变体仍需保留正确性回归，不能仅凭文件新旧推断性能热点。
 
-两个调用契约陷阱（留档）：group 路径要求 weight_scale 为 2D [组数, 2H]；
-`group_index` 语义是**每组行数**（`cumsum_group_list(..., 1)` 的
-dst_list_type=1），传 cumsum 会让 kernel 按递增值当行数累加越界，表象是
-aivec 崩溃（MTE 非法 GM 地址），极像 kernel bug。
+两个调用契约陷阱（留档）：group 路径要求 weight_scale 为 2D [组数, 2H]；`group_index` 语义是**每组行数**（`cumsum_group_list(..., 1)` 的dst_list_type=1），传 cumsum 会让 kernel 按递增值当行数累加越界，表象是aivec 崩溃（MTE 非法 GM 地址），极像 kernel bug。
 
 ### 2.3 基线画像（msprof @2048×4096，36 核）
 
@@ -80,11 +70,7 @@ aivec 崩溃（MTE 非法 GM 地址），极像 kernel bug。
 | scalar busy / vector_stall | 16.5µs / 42.5µs | 表明向量相关等待显著，仍需结合 trace 定位来源 |
 | 有效带宽 | 639GB/s（名义峰值约 40%） | 未显示带宽饱和，但不足以独立排除访存限制 |
 
-每行（H=2048）约 20 遍全宽向量 pass（另有少量窄宽的统计量操作），其中
-4 遍可等价消除（weight scale
-广播拷贝每 tile 重复、两次去交错拷贝、β=0 时的无效 Adds）；36 核上限闲置
-4 核；20.5KB 死分配（tmpBuf2，
-全仓无引用）。
+每行（H=2048）约 20 遍全宽向量 pass（另有少量窄宽的统计量操作），其中4 遍可等价消除（weight scale广播拷贝每 tile 重复、两次去交错拷贝、β=0 时的无效 Adds）；36 核上限闲置4 核；20.5KB 死分配（tmpBuf2，全仓无引用）。
 
 ---
 
@@ -98,9 +84,7 @@ aivec 崩溃（MTE 非法 GM 地址），极像 kernel bug。
 | R3 | tiling 校真：36→40 核、公式 db=1、饱和守卫、删 mode0 强制 tile | 核数闲置、tile 尺寸被历史公式压小、小批量核饥饿 | ✅ 累计 -17.6% |
 | R4 | group 环形核分派 | 每组都从 core 0 分派，尾核闲死 | ✅ 受害 shape -14.0% |
 
-**经验法则**：先用设备实证钉死分派 → 精度回归先行 → 等价变换减 pass →
-tiling 与 kernel 缓冲布局联动校真 → 分派均衡 → 每步用未动路径 + eager ref
-双金丝雀校准噪声（共享宿主 loadavg 33→123 的漂移曾使小档读数 ±10%）。
+**经验法则**：先用设备实证钉死分派 → 精度回归先行 → 等价变换减 pass →tiling 与 kernel 缓冲布局联动校真 → 分派均衡 → 每步用未动路径 + eager ref双金丝雀校准噪声（共享宿主 loadavg 33→123 的漂移曾使小档读数 ±10%）。
 
 ---
 
@@ -124,12 +108,7 @@ for (row = 0; row < proDimsx; ++row)
 // ④ 删除 tmpBuf2 死分配（swigluMode==1 时分配 5B/输出元素、全仓无引用）
 ```
 
-**门槛是本轮的主课**：per-row 形态用少量指令换向量工作量，只在 vec-bound
-形状赚回。初版门槛 `proDimsx ≤ 8` 使 2H=2048（p=5）回退 +8.6%、cut-group
-decode（每组单 tile）回退 +5.8%；修正为
-`rowPath_ = (UbFactorDimx ≤ 4) && (ubDimxLoop ≥ 2)`——**判据必须是运行时
-形态（每核 tile 数）而非静态 tile 参数**，单 tile 核是 issue-bound，+3 条
-指令直接上关键路径。
+**门槛是本轮的主课**：per-row 形态用少量指令换向量工作量，只在 vec-bound形状赚回。初版门槛 `proDimsx ≤ 8` 使 2H=2048（p=5）回退 +8.6%、cut-group decode（每组单 tile）回退 +5.8%；修正为`rowPath_ = (UbFactorDimx ≤ 4) && (ubDimxLoop ≥ 2)`——**判据必须是运行时形态（每核 tile 数）而非静态 tile 参数**，单 tile 核是 issue-bound，+3 条指令直接上关键路径。
 
 ![各版本时延演进](latency_evolution.svg)
 
@@ -137,59 +116,32 @@ decode（每组单 tile）回退 +5.8%；修正为
 
 按固定模板记录（假设 → 实验变量 → 控制变量 → 设备观测 → 结果 → 结论 → 回退）：
 
-1. **假设**：xActQueue 单缓冲使下一 tile 的 MTE2 装载串行在 V 计算之后；
-   DB_BUFFER=2（tiling 公式本就按 db=2 预留）有望隐藏每 tile 约 0.5µs 的
-   装载等待，预期大档时延下降 10% 至 15%（待实验验证）。
-2. **实验变量**：DB_BUFFER 1→2 与 outQueue 双缓冲（kernel 缓冲数）、
-   ComputeDequant→ComputeSwiGLU 之间的 EnQue/DeQue 握手合并（单次
-   DeQue/Free）；过程中按二分法拆出溢出修复（删 mode0 强制 tile 特例、
-   outQueue 回 db=1）与纯增益测量两个阶段。
-3. **控制变量**：保持数据、shape、设备与测量口径一致；每轮 clean build、
-   核对构建产物，并进行精度回归。
+1. **假设**：xActQueue 单缓冲使下一 tile 的 MTE2 装载串行在 V 计算之后；DB_BUFFER=2（tiling 公式本就按 db=2 预留）有望隐藏每 tile 约 0.5µs 的装载等待，预期大档时延下降 10% 至 15%（待实验验证）。
+2. **实验变量**：DB_BUFFER 1→2 与 outQueue 双缓冲（kernel 缓冲数）、ComputeDequant→ComputeSwiGLU 之间的 EnQue/DeQue 握手合并（单次DeQue/Free）；过程中按二分法拆出溢出修复（删 mode0 强制 tile 特例、outQueue 回 db=1）与纯增益测量两个阶段。
+3. **控制变量**：保持数据、shape、设备与测量口径一致；每轮 clean build、核对构建产物，并进行精度回归。
 4. **设备观测**：
-   - 首版**崩溃**（VEC 指令 UB 越界）：mode0 特例强制 p=4@2H=4096 是
-     db=1 时代的调优，db=2 下 xActQueue 翻倍后总量 232KB > 192KB；
-   - 修复溢出后：NPUGraph @2048 为 53.85µs，R1 为 53.33µs，差距约 1%；
-     独立的 msprof 采集显示 MTE2 busy 从基线 15.7µs 到本轮 19.2µs，
-     vec/wall 仍约 80%。busy 时间会重叠，这组数据不能直接证明装载已被隐藏。
-5. **性能与正确性结果**：崩溃版本被回归测试发现；修复后精度测试通过。
-   本次 NPUGraph 测量未见性能收益。非 vec 墙钟可能包含队列事件、流水
-   启停和访存等待；现有 pipe 汇总不足以量化各项占比。
-6. **结论**（按强度分级）：**实测**——本次 db=2 实验未测得收益；
-   **确定性事实**——tiling 公式（db 预算、强制 tile）与 kernel 缓冲布局
-   失配可压小 tile，严重时导致 UB 溢出；**待验证假设**——减少队列事件
-   可能改善大档耗时，需用隔离实验或指令级 trace 验证。
-7. **回退及原因**：整体回退（db=2、outQueue 双缓冲、握手合并全部还原），
-   保持与 R1 最小 diff；记录本次配置和测量结果，供后续复查。
+   - 首版**崩溃**（VEC 指令 UB 越界）：mode0 特例强制 p=4@2H=4096 是db=1 时代的调优，db=2 下 xActQueue 翻倍后总量 232KB > 192KB；
+   - 修复溢出后：NPUGraph @2048 为 53.85µs，R1 为 53.33µs，差距约 1%；独立的 msprof 采集显示 MTE2 busy 从基线 15.7µs 到本轮 19.2µs，vec/wall 仍约 80%。busy 时间会重叠，这组数据不能直接证明装载已被隐藏。
+5. **性能与正确性结果**：崩溃版本被回归测试发现；修复后精度测试通过。本次 NPUGraph 测量未见性能收益。非 vec 墙钟可能包含队列事件、流水启停和访存等待；现有 pipe 汇总不足以量化各项占比。
+6. **结论**（按强度分级）：**实测**——本次 db=2 实验未测得收益；**确定性事实**——tiling 公式（db 预算、强制 tile）与 kernel 缓冲布局失配可压小 tile，严重时导致 UB 溢出；**待验证假设**——减少队列事件可能改善大档耗时，需用隔离实验或指令级 trace 验证。
+7. **回退及原因**：整体回退（db=2、outQueue 双缓冲、握手合并全部还原），保持与 R1 最小 diff；记录本次配置和测量结果，供后续复查。
 
 ### 4.4 R3：tiling 校真（累计 -17.6%）
 
 三项 tiling 改动（kernel 与 R1 相同）：
 
 1. **核数 36→40**：36 来自 DeepSeek V4 移植，无文档理由；设备 40 AIV。
-2. **公式 db 校真**：公式按 db=2 预算而 kernel 实为 db=1（历史失配），
-   tile 被无声压小——校真后 p 取真实上限（2H=4096：2→4）。
-3. **饱和守卫**：大 tile 减边界开销，但小批量下会减核数（ceil(T/p)），
-   丢并行比省 tile 更贵。规则 `p = min(p_max, max(p_legacy, ceil(T/40)))`：
-   只在所有核饱和时才用更大的 tile；p_legacy 按历史公式复算以精确复现
-   基线小批量行为。
+2. **公式 db 校真**：公式按 db=2 预算而 kernel 实为 db=1（历史失配），tile 被无声压小——校真后 p 取真实上限（2H=4096：2→4）。
+3. **饱和守卫**：大 tile 减边界开销，但小批量下会减核数（ceil(T/p)），丢并行比省 tile 更贵。规则 `p = min(p_max, max(p_legacy, ceil(T/40)))`：只在所有核饱和时才用更大的 tile；p_legacy 按历史公式复算以精确复现基线小批量行为。
 
 **两次守卫迭代（负结果留档）**：
 
-- 初版反向 cap（p ≤ ceil(T/40) 保核数）：**方向全错**——小 2H 的每 tile
-  固定开销远大于并行度收益，2H=512、T=64：32 核 × 2 行 tile 比 3 核
-  （行块 24/24/16 行）**慢 72%**。大 tile 优先，守卫只在大 tile 开始吞核数时介入。
-- 公式 db 失配期间 T=128 因 p=3 产生 3+1 尾 tile（+17%）——db 校真后
-  p=4 整除恢复。
+- 初版反向 cap（p ≤ ceil(T/40) 保核数）：**方向全错**——小 2H 的每 tile固定开销远大于并行度收益，2H=512、T=64：32 核 × 2 行 tile 比 3 核（行块 24/24/16 行）**慢 72%**。大 tile 优先，守卫只在大 tile 开始吞核数时介入。
+- 公式 db 失配期间 T=128 因 p=3 产生 3+1 尾 tile（+17%）——db 校真后p=4 整除恢复。
 
 ### 4.5 R4：group 环形核分派（受害 shape -14.0%）
 
-审计发现的真缺陷：非 cut group 路径里每组都从 core 0 重新分派
-（`if (blockIdx_ < realCoreDim)`），组间不复用核序——64 组 × 32 行时全部
-落在 core 0-31、32-39 闲死，比均衡的 cut 路径同工作量慢 1.5×
-（93.0µs vs 61.4µs）。修复：`Process()` 维护环形核偏移，每组的核区间从上
-一组结束处轮转（mod blockDim），组内行块按环内位置分配。适用面：组数
-< 32 或均摊 > 16 行/组的全部非 cut 形态（EP 每卡专家数 < 32、MC2 prefill）。
+审计发现的真缺陷：非 cut group 路径里每组都从 core 0 重新分派（`if (blockIdx_ < realCoreDim)`），组间不复用核序——64 组 × 32 行时全部落在 core 0-31、32-39 闲死，比均衡的 cut 路径同工作量慢 1.5×（93.0µs vs 61.4µs）。修复：`Process()` 维护环形核偏移，每组的核区间从上一组结束处轮转（mod blockDim），组内行块按环内位置分配。适用面：组数< 32 或均摊 > 16 行/组的全部非 cut 形态（EP 每卡专家数 < 32、MC2 prefill）。
 
 ![分档收益](gains_by_shape.svg)
 
@@ -211,17 +163,11 @@ decode（每组单 tile）回退 +5.8%；修正为
 | 2048 | 57.06 | 53.33 | **47.02** | **-17.6%** |
 | 4096 | 106.01 | 98.46 | **84.73** | **-20.1%** |
 
-2H=2048 @4096 -11.5%、2H=1024 @4096 -12.6%、2H=512 @4096 -4.9%；
-group 路径 g64@2048 **-14.0%**（93.0→80.0µs）。其余未列形状的收益需按
-各自 2H 与 tokens 查看，不能把所有中档概括为持平。
+2H=2048 @4096 -11.5%、2H=1024 @4096 -12.6%、2H=512 @4096 -4.9%；group 路径 g64@2048 **-14.0%**（93.0→80.0µs）。其余未列形状的收益需按各自 2H 与 tokens 查看，不能把所有中档概括为持平。
 
 ![瓶颈归因](attribution.svg)
 
-**最终态管线画像**（@2048×4096，msprof）：wall 48.5µs，vec busy 36.4µs
-（约为 wall 的 75%），两者相差约 12.1µs。各 pipe busy 可重叠，这个差值
-不是已测得的“队列开销”，不能拆成各项相加。有效带宽 779GB/s（名义峰值
-约 49%）尚不足以单独判定内存带宽是否处于关键路径。若继续优化，应对
-队列事件、流水启停和访存等待分别做隔离测量。
+**最终态管线画像**（@2048×4096，msprof）：wall 48.5µs，vec busy 36.4µs（约为 wall 的 75%），两者相差约 12.1µs。各 pipe busy 可重叠，这个差值不是已测得的“队列开销”，不能拆成各项相加。有效带宽 779GB/s（名义峰值约 49%）尚不足以单独判定内存带宽是否处于关键路径。若继续优化，应对队列事件、流水启停和访存等待分别做隔离测量。
 
 ---
 
@@ -242,16 +188,10 @@ group 路径 g64@2048 **-14.0%**（93.0→80.0µs）。其余未列形状的收�
 
 ### 5.2 关键经验
 
-1. **分派实证先于一切**：多变体算子先用设备上的 tiling key 钉死生产命中的
-   kernel 文件；"文件新=路径热"的直觉在本算子上完全失效；
-2. **调用契约即坑**：group_index 语义（行数 vs cumsum）与 ws 维度传错都
-   表现为设备端崩溃，先证契约再查 kernel；
+1. **分派实证先于一切**：多变体算子先用设备上的 tiling key 钉死生产命中的kernel 文件；"文件新=路径热"的直觉在本算子上完全失效；
+2. **调用契约即坑**：group_index 语义（行数 vs cumsum）与 ws 维度传错都表现为设备端崩溃，先证契约再查 kernel；
 3. **精度回归先行**：性能改动前先确认主路径和边界条件均通过；
-4. **per-row/双路径等价变换有门槛**：用指令数换向量工作量只在 vec-bound
-   赚回，判据要用运行时形态（每核 tile 数）；
-5. **tiling 公式与 kernel 缓冲布局是一份账**：db 数、死缓冲、强制 tile
-   任何一方改动都要重新对账，否则要么无声压小 tile、要么直接溢出崩溃；
-6. **流水缺口先归因再动手**：本次 db=2 未测得收益，但 pipe busy 汇总
-   不足以确定 MTE2 是否处于关键路径，更不能直接把剩余墙钟归为队列开销；
-7. **负结果完整留档**：db=2、反向 cap、int32→int8 直转（classic API 无
-   此类型对，仅 MicroAPI 有）——三个负结果各带机制，避免未来重推。
+4. **per-row/双路径等价变换有门槛**：用指令数换向量工作量只在 vec-bound赚回，判据要用运行时形态（每核 tile 数）；
+5. **tiling 公式与 kernel 缓冲布局是一份账**：db 数、死缓冲、强制 tile任何一方改动都要重新对账，否则要么无声压小 tile、要么直接溢出崩溃；
+6. **流水缺口先归因再动手**：本次 db=2 未测得收益，但 pipe busy 汇总不足以确定 MTE2 是否处于关键路径，更不能直接把剩余墙钟归为队列开销；
+7. **负结果完整留档**：db=2、反向 cap、int32→int8 直转（classic API 无此类型对，仅 MicroAPI 有）——三个负结果各带机制，避免未来重推。
