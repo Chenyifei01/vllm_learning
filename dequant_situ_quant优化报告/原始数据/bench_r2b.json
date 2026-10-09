@@ -1,0 +1,102 @@
+{
+  "shared rows=1 2H=12288": {
+    "fused_us": 6.0,
+    "ref_us": 35.53,
+    "speedup": 5.92
+  },
+  "shared rows=4 2H=12288": {
+    "fused_us": 6.22,
+    "ref_us": 98.53,
+    "speedup": 15.85
+  },
+  "shared rows=16 2H=12288": {
+    "fused_us": 7.69,
+    "ref_us": 127.77,
+    "speedup": 16.61
+  },
+  "shared rows=64 2H=12288": {
+    "fused_us": 14.7,
+    "ref_us": 170.96,
+    "speedup": 11.63
+  },
+  "shared rows=128 2H=12288": {
+    "fused_us": 23.08,
+    "ref_us": 214.57,
+    "speedup": 9.3
+  },
+  "shared rows=512 2H=12288": {
+    "fused_us": 56.21,
+    "ref_us": 397.83,
+    "speedup": 7.08
+  },
+  "shared rows=1024 2H=12288": {
+    "fused_us": 104.87,
+    "ref_us": 674.25,
+    "speedup": 6.43
+  },
+  "shared rows=2048 2H=12288": {
+    "fused_us": 203.27,
+    "ref_us": 1473.45,
+    "speedup": 7.25
+  },
+  "shared rows=1 2H=6144": {
+    "fused_us": 4.53,
+    "ref_us": 30.31,
+    "speedup": 6.69
+  },
+  "shared rows=16 2H=6144": {
+    "fused_us": 6.03,
+    "ref_us": 122.1,
+    "speedup": 20.24
+  },
+  "shared rows=128 2H=6144": {
+    "fused_us": 15.44,
+    "ref_us": 177.05,
+    "speedup": 11.47
+  },
+  "shared rows=1024 2H=6144": {
+    "fused_us": 60.49,
+    "ref_us": 402.07,
+    "speedup": 6.65
+  },
+  "shared rows=4096 2H=6144": {
+    "fused_us": 214.89,
+    "ref_us": 1477.82,
+    "speedup": 6.88
+  },
+  "routed rows=16 2H=6144": {
+    "fused_us": 38.46,
+    "ref_us": 161.84,
+    "speedup": 4.21
+  },
+  "routed rows=1040 2H=6144": {
+    "fused_us": 73.72,
+    "ref_us": 481.62,
+    "speedup": 6.53
+  },
+  "routed rows=65536 2H=6144": {
+    "fused_us": 3531.96,
+    "ref_us": 46080.28,
+    "speedup": 13.05
+  },
+  "bf16 rows=1 2H=6144": {
+    "fused_us": 3.97,
+    "ref_us": 26.38,
+    "speedup": 6.64
+  },
+  "bf16 rows=16 2H=6144": {
+    "fused_us": 5.82,
+    "ref_us": 110.83,
+    "speedup": 19.03
+  },
+  "bf16 rows=1040 2H=6144": {
+    "fused_us": 54.68,
+    "ref_us": 346.14,
+    "speedup": 6.33
+  },
+  "bf16 rows=4096 2H=6144": {
+    "fused_us": 197.09,
+    "ref_us": 1245.62,
+    "speedup": 6.32
+  }
+}

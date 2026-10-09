@@ -1,0 +1,2 @@
+Op Name,Op Type,Task Duration(us),Block Dim,Mix Block Dim,Device Id,Pid,Current Freq,Rated Freq,
+DequantSituQuant_155c0b64db4933bc3ce18e0c9bfff74c_30000,vector,113.442268,40,NA,0,363957,1800,1800,

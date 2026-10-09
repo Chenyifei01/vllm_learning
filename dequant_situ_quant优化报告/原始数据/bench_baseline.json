@@ -1,0 +1,102 @@
+{
+  "shared rows=1 2H=12288": {
+    "fused_us": 5.83,
+    "ref_us": 36.04,
+    "speedup": 6.19
+  },
+  "shared rows=4 2H=12288": {
+    "fused_us": 6.15,
+    "ref_us": 102.2,
+    "speedup": 16.63
+  },
+  "shared rows=16 2H=12288": {
+    "fused_us": 7.97,
+    "ref_us": 134.57,
+    "speedup": 16.88
+  },
+  "shared rows=64 2H=12288": {
+    "fused_us": 15.85,
+    "ref_us": 175.13,
+    "speedup": 11.05
+  },
+  "shared rows=128 2H=12288": {
+    "fused_us": 23.91,
+    "ref_us": 218.1,
+    "speedup": 9.12
+  },
+  "shared rows=512 2H=12288": {
+    "fused_us": 59.53,
+    "ref_us": 410.71,
+    "speedup": 6.9
+  },
+  "shared rows=1024 2H=12288": {
+    "fused_us": 110.89,
+    "ref_us": 683.37,
+    "speedup": 6.16
+  },
+  "shared rows=2048 2H=12288": {
+    "fused_us": 213.63,
+    "ref_us": 1512.72,
+    "speedup": 7.08
+  },
+  "shared rows=1 2H=6144": {
+    "fused_us": 4.32,
+    "ref_us": 30.6,
+    "speedup": 7.09
+  },
+  "shared rows=16 2H=6144": {
+    "fused_us": 6.13,
+    "ref_us": 130.09,
+    "speedup": 21.22
+  },
+  "shared rows=128 2H=6144": {
+    "fused_us": 17.38,
+    "ref_us": 182.32,
+    "speedup": 10.49
+  },
+  "shared rows=1024 2H=6144": {
+    "fused_us": 69.4,
+    "ref_us": 412.64,
+    "speedup": 5.95
+  },
+  "shared rows=4096 2H=6144": {
+    "fused_us": 251.48,
+    "ref_us": 1498.16,
+    "speedup": 5.96
+  },
+  "routed rows=16 2H=6144": {
+    "fused_us": 40.22,
+    "ref_us": 170.86,
+    "speedup": 4.25
+  },
+  "routed rows=1040 2H=6144": {
+    "fused_us": 80.7,
+    "ref_us": 494.69,
+    "speedup": 6.13
+  },
+  "routed rows=65536 2H=6144": {
+    "fused_us": 4400.47,
+    "ref_us": 46345.12,
+    "speedup": 10.53
+  },
+  "bf16 rows=1 2H=6144": {
+    "fused_us": 3.73,
+    "ref_us": 26.25,
+    "speedup": 7.04
+  },
+  "bf16 rows=16 2H=6144": {
+    "fused_us": 5.67,
+    "ref_us": 115.93,
+    "speedup": 20.43
+  },
+  "bf16 rows=1040 2H=6144": {
+    "fused_us": 63.59,
+    "ref_us": 356.2,
+    "speedup": 5.6
+  },
+  "bf16 rows=4096 2H=6144": {
+    "fused_us": 231.74,
+    "ref_us": 1247.04,
+    "speedup": 5.38
+  }
+}
