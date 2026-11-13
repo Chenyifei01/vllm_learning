@@ -46,7 +46,7 @@
 
 `ids` 是整数下标，不是文本。实现中常见 `int32` 或 `int64`；vLLM 的非融合路径在调用底层 embedding 前会转成 `long`（`int64`），融合 kernel 的下标 dtype 则由底层算子处理。
 
-形状方面，框架层（如 `nn.Embedding`）的输入可以是 `[batch, seq]` 或任意前导维；vLLM 内部通常先展平为 `[num_tokens]` 再查表，最后恢复为“输入形状 + `[H]`”。前导维只决定 token 的排布和输出偏移，不影响“取哪一行”。因此，把输入理解为 `[num_tokens]` 是 kernel 视角的简化，不应写成 embedding 只接受 `[num_tokens]`。
+形状方面，框架层（如 `nn.Embedding`）的输入可以是 `[batch, seq]` 或任意前导维；在 TP>1 的融合路径中，vLLM 会先展平为 `[num_tokens]` 再查表，最后恢复为“输入形状 + `[H]`”；非融合路径则可以直接把 nD 输入交给底层 embedding。前导维只决定 token 的排布和输出偏移，不影响“取哪一行”。因此，把输入理解为 `[num_tokens]` 是 kernel 视角的简化，不应写成 embedding 只接受 `[num_tokens]`。
 
 有效 id 的范围是 `[0, vocab-1]`；若存在 added vocab，上界是逻辑词表大小。padding 行不是用户可输入的 id。
 
@@ -92,13 +92,13 @@ gather 没有有效浮点乘加，但有地址计算、mask、clamp/置零等标
 
 准确地说，这不是“八次串行的本地访存”，而是：所有 rank 并行做一次本地 gather（地址仍由 id 决定，数据相关），再做一次集合通信。它把跨卡随机请求换成了本地访存 + 通信。
 
-代价有两块：一是读放大——每个 rank 都为每个 token 读一行，TP 个 rank 合计读 `TP × N` 行，其中大部分最终被置零；二是通信——all-reduce 仍要传完整的 `[N, H]`，7/8 的零行不会让通信量变成 1/8。
+代价有两块：一是读放大——在非融合/无条件实现中，每个 rank 都为每个 token 读一行，TP 个 rank 合计读 `TP × N` 行，其中大部分最终被置零；如果融合 kernel 能按 mask 跳过无效行，读放大会下降，但通信量不变；二是通信——all-reduce 仍要传完整的 `[N, H]`，7/8 的零行不会让通信量变成 1/8。
 
 TP=8、单个 token 时，7 个 rank 输出零行；对一个 batch，每个 rank 会命中其中一部分 token。
 
 实现上，上游 vLLM 默认 all-reduce，`reduce_results=False` 可跳过；vllm-ascend 的 `maybe_pad_and_reduce` 在 flash comm/SP 场景可能是 reduce-scatter。文中统一说“集合通信/归约”，具体以版本和路径为准。
 
-边界：图5 中 CANN 侧只有普通 `Embedding`/`Gather` 算子，mask/置零/归约由框架补齐；而 vLLM 的 `VocabParallelEmbedding` 是层/模块级实现，包含这些步骤。讨论“算子”时要先说明是哪一层。
+边界：图5 中 CANN 侧通常是通用的 `Embedding`/`Gather` 算子，mask/置零/归约由框架补齐；而 vLLM 的 `VocabParallelEmbedding` 是层/模块级实现，包含这些步骤。讨论“算子”时要先说明是哪一层。
 
 ![图5 TP 切分与框架侧归约](assets/fig5_tp_shard.png)
 
@@ -116,7 +116,7 @@ TP=8、单个 token 时，7 个 rank 输出零行；对一个 batch，每个 ran
 4. 置零：对非本 rank 的 id，把整行写成 0。
 5. 集合通信：默认 all-reduce，把各 rank 的部分结果逐元素相加；`reduce_results=False` 时跳过，vllm-ascend 可能是 reduce-scatter。
 
-注意：①/②/④ 是逐元素操作；在上游非融合路径中，`get_masked_input_and_mask` 被 `@torch.compile` 装饰，注释明确说 pointwise ops 会融合成一个 kernel。因此“额外起 kernel”只在 eager 或旧版本成立。融合路径更是把 mask/shift/gather 一次完成。
+注意：①/② 在 `get_masked_input_and_mask` 内，被 `@torch.compile` 装饰，注释明确说 pointwise ops 会融合成一个 kernel；④ 仍是单独的 `masked_fill` 操作。因此“mask/偏移要额外起 kernel”只在 eager 或旧版本成立，不能说整个五步都只剩一个 kernel。融合路径则是把 mask/shift/gather 一次完成。
 
 后文 6.2 节步骤中的 clamp 是另一种等价写法；不要把它和 vLLM 的 mask + 偏移混为一谈。
 
@@ -212,9 +212,9 @@ TP=8、单个 token 时，7 个 rank 输出零行；对一个 batch，每个 ran
 
 | 路径 | 机制 | 优点 | 代价/限制 |
 |---|---|---|---|
-| 本地查表 + 置零 + 归约 | 每 rank 查本地分片，miss 置零，最后 all-reduce | 实现简单、行为可预测 | TP 倍读放大 + 完整 `[N,H]` 通信 |
+| 本地查表 + 置零 + 归约 | 每 rank 查本地分片，miss 置零，最后 all-reduce | 实现简单、行为可预测 | 无条件实现下 TP 倍读放大 + 完整 `[N,H]` 通信 |
 | 逐行 DataCopy | 按 local 行号搬一行 | 通用、易对齐 | 随机行、指令/启动开销 |
-| 硬件 Gather/GatherMask | 按索引一次取多行 | 指令少、吞吐高 | 受 dtype、对齐、行大小限制 |
+| 硬件 Gather/GatherMask | 按索引批量取元素/行 | 指令少、吞吐高 | 受 dtype、对齐、粒度限制 |
 | P2P/All-to-All | 按 owner 把行取回 | 无无效读 | 通信复杂、尾延迟高 |
 
 选择顺序建议：先确认硬件 Gather 是否支持 H 行大小和当前 dtype；不支持则逐行 DataCopy + 多缓冲；TP 场景再比较“本地查表 + 归约”和 P2P/All-to-All 的端到端成本。
@@ -240,7 +240,7 @@ prefill 和 decode 的目标不同，参数不应共用一套。
 
 精度上，单卡 gather 是纯拷贝，输出应与参考逐元素一致；TP 下每个 rank 的本地输出含零行，归约后应与参考一致；量化权重按量化误差单独评估。
 
-性能模型先算下界：单卡 `2 × N × H × sizeof(dtype) + N × sizeof(id)` 字节；TP 下每 rank 读 N 行，合计 `TP × N` 行，另加 all-reduce；ring 单 rank 通信量约 `2(TP-1)/TP × N × H × sizeof(dtype)`。
+性能模型先算下界：单卡 `2 × N × H × sizeof(dtype) + N × sizeof(id)` 字节；若按无条件本地查表模型，TP 下每 rank 读 N 行，合计 `TP × N` 行，另加 all-reduce（融合 kernel 若跳过无效行，读量按命中率下降）；ring 单 rank 通信量约 `2(TP-1)/TP × N × H × sizeof(dtype)`。
 
 先做 roofline 上限，再上板测有效带宽；指标看 latency、有效带宽、all-reduce 占比、相对 baseline 加速比。不要只看单算子，最好看 layer 或端到端。
 
